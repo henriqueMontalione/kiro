@@ -53,6 +53,15 @@ export const RECEBIMENTOS_TODAY = {
   hourly: [4, 6, 3, 5, 8, 10, 12, 18, 24, 32, 38, 42, 46, 40, 36, 24, 20, 18, 14, 10, 8, 6, 4, 3],
 };
 
+/** Receivables window shown on the mobile home (next 30 days). */
+export const A_RECEBER = {
+  total: 'R$ 5.000,00',
+  window: '30 dias',
+};
+
+/** APY label used in the balance card pill. */
+export const YIELD_APY_LABEL = '6% APY';
+
 /** Recent transactions shown on the Resumo screen (top 5). */
 export const RECENT_TX: Transaction[] = [
   { id: '10293', label: 'Pagamento via PIX', amount: 'R$ 259,90', status: 'success', when: 'Hoje, 14:32', accent: 'green', kind: 'pix' },

@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { Sidebar } from '@/components/Sidebar';
 import { Header } from '@/components/Header';
+import { MobileHeader } from '@/components/mobile/MobileHeader';
+import { MobileBottomNav } from '@/components/mobile/MobileBottomNav';
 import { ReceberPixModal } from '@/components/ReceberPixModal';
 import Resumo from '@/pages/Resumo';
 import Transacoes from '@/pages/Transacoes';
@@ -9,11 +11,15 @@ import Recebimentos from '@/pages/Recebimentos';
 import Placeholder from '@/pages/Placeholder';
 
 /**
- * Application shell:
- * - Fixed left Sidebar
- * - Sticky Header (top tabs + user chip)
- * - Routed main content
- * - Receber via PIX modal (lifted to root so any page can open it)
+ * Application shell.
+ *
+ * Layout adapts at the `md` breakpoint (768px):
+ * - Below md: MobileHeader at top, MobileBottomNav fixed at bottom.
+ *   Content gets bottom padding so the last card clears the nav bar.
+ * - At md and above: classic left Sidebar + sticky Header.
+ *
+ * The PIX modal is lifted to the root so any page (mobile or desktop)
+ * can open it via the `onReceive` prop.
  */
 export default function App() {
   const [pixOpen, setPixOpen] = useState(false);
@@ -22,16 +28,19 @@ export default function App() {
 
   return (
     <div className="flex min-h-screen">
-      <Sidebar />
+      <div className="hidden md:flex">
+        <Sidebar />
+      </div>
 
       <main className="flex-1 flex flex-col min-w-0">
-        <Header />
+        <div className="md:hidden">
+          <MobileHeader />
+        </div>
+        <div className="hidden md:block">
+          <Header />
+        </div>
 
-        <div
-          className="flex-1 overflow-auto relative"
-          style={{ padding: '28px 28px 40px' }}
-        >
-          {/* Ambient corner glows — green top-left, purple bottom-right. */}
+        <div className="flex-1 overflow-auto relative">
           <div
             aria-hidden="true"
             className="absolute inset-0 pointer-events-none"
@@ -41,7 +50,10 @@ export default function App() {
                 'radial-gradient(620px 460px at 18% 12%, rgba(0,255,135,0.05), transparent 60%), radial-gradient(620px 460px at 92% 100%, rgba(123,44,191,0.07), transparent 60%)',
             }}
           />
-          <div className="relative" style={{ zIndex: 1 }}>
+          <div
+            className="relative px-4 pt-4 pb-[96px] md:px-7 md:pt-7 md:pb-10"
+            style={{ zIndex: 1 }}
+          >
             <Routes>
               <Route path="/" element={<Navigate to="/resumo" replace />} />
               <Route path="/resumo" element={<Resumo onReceive={openPix} />} />
@@ -53,11 +65,16 @@ export default function App() {
               <Route path="/relatorios" element={<Placeholder name="Relatórios" />} />
               <Route path="/integracoes" element={<Placeholder name="Integrações" />} />
               <Route path="/config" element={<Placeholder name="Configurações" />} />
+              <Route path="/mais" element={<Placeholder name="Mais" />} />
               <Route path="*" element={<Navigate to="/resumo" replace />} />
             </Routes>
           </div>
         </div>
       </main>
+
+      <div className="md:hidden">
+        <MobileBottomNav />
+      </div>
 
       <ReceberPixModal open={pixOpen} onClose={closePix} />
     </div>
