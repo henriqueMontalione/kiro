@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" fill="none" aria-label="Kiro isotype">
+  <defs>
+    <linearGradient id="kiroLeftArc" x1="60" y1="30" x2="60" y2="170" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#00FF87"></stop>
+      <stop offset="0.55" stop-color="#3FD9B3"></stop>
+      <stop offset="1" stop-color="#7B2CBF"></stop>
+    </linearGradient>
+    <linearGradient id="kiroRightArc" x1="140" y1="30" x2="140" y2="170" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#00FF87"></stop>
+      <stop offset="0.5" stop-color="#4DB8E0"></stop>
+      <stop offset="1" stop-color="#7B2CBF"></stop>
+    </linearGradient>
+  </defs>
+  
+  <path d="M 60 28 Q 60 80 100 100 Q 60 120 60 172" stroke="url(#kiroLeftArc)" stroke-width="22" stroke-linecap="round" fill="none"></path>
+  
+  <path d="M 140 28 Q 140 80 100 100 Q 140 120 140 172" stroke="url(#kiroRightArc)" stroke-width="22" stroke-linecap="round" fill="none"></path>
+</svg>
