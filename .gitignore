@@ -1,0 +1,40 @@
+# Security
+.env
+*.pem
+*.key
+
+postgres_data/
+
+# GO
+bin/
+tmp/
+
+# Node
+node_modules/
+dist/
+build/
+.next/
+out/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Contracts
+target/
+
+# OS
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+desktop.ini
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Tests
+*.out
+*.coverprofile
