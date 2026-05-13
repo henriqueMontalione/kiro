@@ -23,6 +23,10 @@ logs
 pnpm-debug.log*
 lerna-debug.log*
 *.tsbuildinfo
+*tailwind.config.d.ts
+*tailwind.config.js
+*vite.config.d.ts
+*vite.config.js
 
 # Contracts
 target/
