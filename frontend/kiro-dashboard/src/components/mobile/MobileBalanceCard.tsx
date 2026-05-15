@@ -2,35 +2,37 @@ import { useState } from 'react';
 import { Eye, EyeOff, Sparkles } from 'lucide-react';
 import { Card } from '../Card';
 import { Button } from '../Button';
-import { BALANCE, YIELD_APY_LABEL } from '@/lib/mocks';
+import { YIELD_APY_LABEL } from '@/lib/mocks';
+import { useWallet } from '@/context/WalletContext';
+import { formatBRL } from '@/lib/stellar';
 
 interface MobileBalanceCardProps {
   onReceive: () => void;
 }
 
-/**
- * Mobile saldo card. Single full-width column, with the secondary
- * "Sacar PIX" CTA below the number. The primary "Cobrar" surface from
- * the reference image is intentionally omitted — withdrawal is the only
- * action shipped on the mobile home for now.
- */
 export function MobileBalanceCard({ onReceive }: MobileBalanceCardProps) {
   const [hidden, setHidden] = useState(false);
+  const { isConnected, balance } = useWallet();
+
+  const displayBalance = isConnected && balance !== null ? formatBRL(balance) : 'R$ 0,00';
+  const isBlurred = !isConnected || hidden;
 
   return (
     <Card>
       <div className="flex items-center justify-between mb-3">
         <span className="k-eyebrow">Saldo Disponível</span>
-        <button
-          type="button"
-          onClick={() => setHidden((h) => !h)}
-          aria-label={hidden ? 'Mostrar saldo' : 'Ocultar saldo'}
-          aria-pressed={hidden}
-          className="inline-flex items-center justify-center rounded-full bg-transparent border-none cursor-pointer text-[var(--fg-3)] hover:text-[var(--fg-1)] hover:bg-white/[0.04] transition-colors"
-          style={{ width: 36, height: 36 }}
-        >
-          {hidden ? <EyeOff size={18} strokeWidth={1.6} /> : <Eye size={18} strokeWidth={1.6} />}
-        </button>
+        {isConnected && (
+          <button
+            type="button"
+            onClick={() => setHidden((h) => !h)}
+            aria-label={hidden ? 'Mostrar saldo' : 'Ocultar saldo'}
+            aria-pressed={hidden}
+            className="inline-flex items-center justify-center rounded-full bg-transparent border-none cursor-pointer text-[var(--fg-3)] hover:text-[var(--fg-1)] hover:bg-white/[0.04] transition-colors"
+            style={{ width: 36, height: 36 }}
+          >
+            {hidden ? <EyeOff size={18} strokeWidth={1.6} /> : <Eye size={18} strokeWidth={1.6} />}
+          </button>
+        )}
       </div>
 
       <div
@@ -41,11 +43,12 @@ export function MobileBalanceCard({ onReceive }: MobileBalanceCardProps) {
           color: 'var(--kiro-green)',
           textShadow: '0 0 24px rgba(0,255,135,0.28)',
           letterSpacing: '-0.01em',
-          filter: hidden ? 'blur(12px)' : 'none',
+          filter: isBlurred ? 'blur(12px)' : 'none',
           transition: 'filter 200ms ease-out',
+          userSelect: isBlurred ? 'none' : 'auto',
         }}
       >
-        {BALANCE.available}
+        {displayBalance}
       </div>
 
       <div

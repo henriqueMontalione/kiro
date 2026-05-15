@@ -15,15 +15,14 @@ import { xBullModule } from '@creit.tech/stellar-wallets-kit/modules/xbull.modul
 import { AlbedoModule } from '@creit.tech/stellar-wallets-kit/modules/albedo.module';
 import { LobstrModule } from '@creit.tech/stellar-wallets-kit/modules/lobstr.module';
 // Side-effect import: registers the <stellar-wallets-modal> custom element.
-// openModal() calls document.createElement('stellar-wallets-modal') — without
-// this import the element is undefined and renders nothing.
 import '@creit.tech/stellar-wallets-kit/components/modal/stellar-wallets-modal';
-import { fetchXlmBalance, WALLET_NETWORK } from '@/lib/stellar';
+import { fetchTesouroBalance, WALLET_NETWORK } from '@/lib/stellar';
 
 interface WalletState {
   isConnected: boolean;
   publicKey: string | null;
-  xlmBalance: string | null;
+  /** Raw TESOURO balance from Horizon (e.g. "1000.0000000"), or null when not connected / issuer unconfigured. */
+  balance: string | null;
   isLoading: boolean;
   connect: () => void;
   disconnect: () => void;
@@ -48,7 +47,7 @@ function createKit() {
 
 export function WalletProvider({ children }: { children: ReactNode }) {
   const [publicKey, setPublicKey] = useState<string | null>(null);
-  const [xlmBalance, setXlmBalance] = useState<string | null>(null);
+  const [balance, setBalance] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
   const connect = useCallback(() => {
@@ -66,8 +65,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         try {
           const { address } = await kit.getAddress();
           setPublicKey(address);
-          const balance = await fetchXlmBalance(address);
-          setXlmBalance(balance);
+          const bal = await fetchTesouroBalance(address);
+          setBalance(bal);
         } catch (err) {
           console.error('[Wallet] Failed to get address:', err);
         } finally {
@@ -79,12 +78,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const disconnect = useCallback(() => {
     setPublicKey(null);
-    setXlmBalance(null);
+    setBalance(null);
   }, []);
 
   return (
     <WalletContext.Provider
-      value={{ isConnected: !!publicKey, publicKey, xlmBalance, isLoading, connect, disconnect }}
+      value={{ isConnected: !!publicKey, publicKey, balance, isLoading, connect, disconnect }}
     >
       {children}
     </WalletContext.Provider>
