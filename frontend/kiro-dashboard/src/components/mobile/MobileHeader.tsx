@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Bell } from 'lucide-react';
 import { NotificationsPopover } from '../NotificationsPopover';
+import { WalletButtonMobile } from '../WalletButton';
 import { MERCHANT } from '@/lib/mocks';
 
 /**
@@ -39,7 +40,9 @@ export function MobileHeader() {
         </div>
       </div>
 
-      <button
+      <div className="flex items-center">
+        <WalletButtonMobile />
+        <button
         type="button"
         onClick={() => setNotifOpen((o) => !o)}
         aria-label="Notificações"
@@ -60,6 +63,7 @@ export function MobileHeader() {
           aria-hidden="true"
         />
       </button>
+      </div>
 
       {notifOpen && <NotificationsPopover onClose={() => setNotifOpen(false)} />}
     </header>

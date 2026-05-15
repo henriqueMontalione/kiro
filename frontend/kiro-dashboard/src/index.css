@@ -41,6 +41,15 @@
   }
 }
 
+/* Stellar Wallets Kit modal — the custom element must have a stacking context
+   in the light DOM so its shadow content renders above our fixed navigation
+   (MobileBottomNav z-40, MobileHeader z-30). The internal dialog already uses
+   position:fixed / z-index:990 inside the shadow root, which is unaffected. */
+stellar-wallets-modal {
+  position: relative;
+  z-index: 9999;
+}
+
 @layer components {
   /* Mono / money helpers — used everywhere financial data shows up. */
   .k-money {

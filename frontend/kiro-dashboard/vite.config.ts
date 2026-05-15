@@ -10,6 +10,19 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  // CJS wallet SDKs inside stellar-wallets-kit reference Node's `global`.
+  // `define` covers source transforms; `optimizeDeps.esbuildOptions.define`
+  // covers the pre-bundling step where CJS → ESM conversion happens.
+  define: {
+    global: 'globalThis',
+  },
+  optimizeDeps: {
+    esbuildOptions: {
+      define: {
+        global: 'globalThis',
+      },
+    },
+  },
   server: {
     port: 5173,
     host: true,

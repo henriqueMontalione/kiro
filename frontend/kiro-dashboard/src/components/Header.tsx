@@ -3,6 +3,7 @@ import { Bell, HelpCircle, ChevronDown } from 'lucide-react';
 import { TopTabs } from './TopTabs';
 import { IconButton } from './IconButton';
 import { NotificationsPopover } from './NotificationsPopover';
+import { WalletButton } from './WalletButton';
 import { MERCHANT } from '@/lib/mocks';
 
 /** Top app header: tabs left, notifs / help / user-chip right. */
@@ -17,6 +18,7 @@ export function Header() {
       <TopTabs />
 
       <div className="flex items-center gap-[10px]">
+        <WalletButton />
         <IconButton
           icon={Bell}
           badge
