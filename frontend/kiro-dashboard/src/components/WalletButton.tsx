@@ -7,7 +7,7 @@ import { truncateKey } from '@/lib/stellar';
  * Used in the top Header alongside the user chip.
  */
 export function WalletButton() {
-  const { isConnected, publicKey, xlmBalance, isLoading, connect, disconnect } = useWallet();
+  const { isConnected, publicKey, isLoading, connect, disconnect } = useWallet();
 
   if (isLoading) {
     return (
@@ -32,9 +32,6 @@ export function WalletButton() {
             aria-hidden="true"
           />
           <span className="font-mono tracking-tight">{truncateKey(publicKey)}</span>
-          {xlmBalance !== null && (
-            <span className="text-[var(--fg-3)]">{xlmBalance} XLM</span>
-          )}
         </div>
         <button
           type="button"
