@@ -3,6 +3,7 @@ import {
   useContext,
   useState,
   useCallback,
+  useRef,
   type ReactNode,
 } from 'react';
 // Sub-path imports intentional: the main package entry (index.mjs) re-exports
@@ -16,7 +17,7 @@ import { AlbedoModule } from '@creit.tech/stellar-wallets-kit/modules/albedo.mod
 import { LobstrModule } from '@creit.tech/stellar-wallets-kit/modules/lobstr.module';
 // Side-effect import: registers the <stellar-wallets-modal> custom element.
 import '@creit.tech/stellar-wallets-kit/components/modal/stellar-wallets-modal';
-import { fetchTesouroBalance, WALLET_NETWORK } from '@/lib/stellar';
+import { fetchTesouroBalance, WALLET_NETWORK, NETWORK_PASSPHRASE } from '@/lib/stellar';
 
 interface WalletState {
   isConnected: boolean;
@@ -26,6 +27,10 @@ interface WalletState {
   isLoading: boolean;
   connect: () => void;
   disconnect: () => void;
+  /** Signs an XDR transaction envelope with the connected wallet. Returns the signed XDR. */
+  signTransaction: (xdr: string) => Promise<string>;
+  /** Re-fetches the TESOURO balance from Horizon. No-op if not connected. */
+  refreshBalance: () => Promise<void>;
 }
 
 const WalletContext = createContext<WalletState | null>(null);
@@ -50,6 +55,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [balance, setBalance] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
+  // Persisted across connect → signTransaction calls.
+  const kitRef = useRef<StellarWalletsKit | null>(null);
+
   const connect = useCallback(() => {
     // The kit tracks modal state internally and the custom element persists in
     // the DOM across HMR reloads. Removing any stale element and using a fresh
@@ -61,6 +69,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     kit.openModal({
       onWalletSelected: async (option) => {
         kit.setWallet(option.id);
+        kitRef.current = kit;
         setIsLoading(true);
         try {
           const { address } = await kit.getAddress();
@@ -77,13 +86,29 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const disconnect = useCallback(() => {
+    kitRef.current = null;
     setPublicKey(null);
     setBalance(null);
   }, []);
 
+  const signTransaction = useCallback(async (xdr: string): Promise<string> => {
+    const kit = kitRef.current;
+    if (!kit) throw new Error('Carteira não conectada');
+    const { signedTxXdr } = await kit.signTransaction(xdr, {
+      networkPassphrase: NETWORK_PASSPHRASE,
+    });
+    return signedTxXdr;
+  }, []);
+
+  const refreshBalance = useCallback(async () => {
+    if (!publicKey) return;
+    const bal = await fetchTesouroBalance(publicKey);
+    setBalance(bal);
+  }, [publicKey]);
+
   return (
     <WalletContext.Provider
-      value={{ isConnected: !!publicKey, publicKey, balance, isLoading, connect, disconnect }}
+      value={{ isConnected: !!publicKey, publicKey, balance, isLoading, connect, disconnect, signTransaction, refreshBalance }}
     >
       {children}
     </WalletContext.Provider>
