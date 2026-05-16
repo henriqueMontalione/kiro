@@ -5,7 +5,11 @@ import { Header } from '@/components/Header';
 import { MobileHeader } from '@/components/mobile/MobileHeader';
 import { MobileBottomNav } from '@/components/mobile/MobileBottomNav';
 import { ReceberPixModal } from '@/components/ReceberPixModal';
+import { SacarPixModal } from '@/components/SacarPixModal';
 import Resumo from '@/pages/Resumo';
+// On /resumo, "Receber via PIX" triggers the off-ramp flow (TESOURO → BRL).
+// On /recebimentos, the same prop name still means "receive a customer payment"
+// — so each route wires the prop to a different handler.
 import Transacoes from '@/pages/Transacoes';
 import Recebimentos from '@/pages/Recebimentos';
 import Placeholder from '@/pages/Placeholder';
@@ -25,6 +29,10 @@ export default function App() {
   const [pixOpen, setPixOpen] = useState(false);
   const openPix = () => setPixOpen(true);
   const closePix = () => setPixOpen(false);
+
+  const [sacarOpen, setSacarOpen] = useState(false);
+  const openSacar = () => setSacarOpen(true);
+  const closeSacar = () => setSacarOpen(false);
 
   return (
     <div className="flex min-h-screen">
@@ -56,7 +64,7 @@ export default function App() {
           >
             <Routes>
               <Route path="/" element={<Navigate to="/resumo" replace />} />
-              <Route path="/resumo" element={<Resumo onReceive={openPix} />} />
+              <Route path="/resumo" element={<Resumo onReceive={openSacar} />} />
               <Route path="/transacoes" element={<Transacoes />} />
               <Route path="/recebimentos" element={<Recebimentos onReceive={openPix} />} />
               <Route path="/extrato" element={<Placeholder name="Extrato" />} />
@@ -77,6 +85,7 @@ export default function App() {
       </div>
 
       <ReceberPixModal open={pixOpen} onClose={closePix} />
+      <SacarPixModal open={sacarOpen} onClose={closeSacar} />
     </div>
   );
 }
