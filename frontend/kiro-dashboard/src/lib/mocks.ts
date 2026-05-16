@@ -10,6 +10,7 @@ export const MERCHANT = {
   role: 'Merchant',
   initials: 'LO',
   pixKey: 'kiro.loja.origem@pix.com.br',
+  email: 'contato@lojaorigem.com.br',
 };
 
 export const BALANCE = {

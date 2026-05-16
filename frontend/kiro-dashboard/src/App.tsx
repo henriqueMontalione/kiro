@@ -12,6 +12,7 @@ import Resumo from '@/pages/Resumo';
 // — so each route wires the prop to a different handler.
 import Transacoes from '@/pages/Transacoes';
 import Recebimentos from '@/pages/Recebimentos';
+import Configuracoes from '@/pages/Configuracoes';
 import Placeholder from '@/pages/Placeholder';
 
 /**
@@ -72,7 +73,7 @@ export default function App() {
               <Route path="/clientes" element={<Placeholder name="Clientes" />} />
               <Route path="/relatorios" element={<Placeholder name="Relatórios" />} />
               <Route path="/integracoes" element={<Placeholder name="Integrações" />} />
-              <Route path="/config" element={<Placeholder name="Configurações" />} />
+              <Route path="/config" element={<Configuracoes />} />
               <Route path="/mais" element={<Placeholder name="Mais" />} />
               <Route path="*" element={<Navigate to="/resumo" replace />} />
             </Routes>

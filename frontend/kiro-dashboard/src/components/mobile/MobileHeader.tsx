@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { Bell } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Bell, Settings } from 'lucide-react';
 import { NotificationsPopover } from '../NotificationsPopover';
 import { WalletButtonMobile } from '../WalletButton';
-import { MERCHANT } from '@/lib/mocks';
+import { useUserProfile } from '@/context/UserProfileContext';
 
 /**
  * Sticky top bar for the mobile shell.
@@ -13,6 +14,8 @@ import { MERCHANT } from '@/lib/mocks';
  */
 export function MobileHeader() {
   const [notifOpen, setNotifOpen] = useState(false);
+  const { name, initials, photoUrl } = useUserProfile();
+  const navigate = useNavigate();
 
   return (
     <header
@@ -21,27 +24,40 @@ export function MobileHeader() {
     >
       <div className="flex items-center gap-3 min-w-0">
         <span
-          className="inline-flex items-center justify-center rounded-full font-display font-semibold text-[13px] text-white flex-shrink-0"
+          className="inline-flex items-center justify-center rounded-full font-display font-semibold text-[13px] text-white flex-shrink-0 overflow-hidden"
           style={{
             width: 40,
             height: 40,
-            background: 'linear-gradient(135deg, #9D4EDD, #7B2CBF)',
+            background: photoUrl ? 'var(--bg-3)' : 'linear-gradient(135deg, #9D4EDD, #7B2CBF)',
             letterSpacing: '0.04em',
           }}
           aria-hidden="true"
         >
-          {MERCHANT.initials}
+          {photoUrl ? (
+            <img src={photoUrl} alt="" className="w-full h-full object-cover" />
+          ) : (
+            initials
+          )}
         </span>
         <div className="flex flex-col leading-tight min-w-0">
           <span className="text-[12px] text-[var(--fg-3)] font-sans">Olá,</span>
           <span className="text-[15px] text-[var(--fg-1)] font-display font-semibold truncate">
-            {MERCHANT.name}
+            {name}
           </span>
         </div>
       </div>
 
       <div className="flex items-center">
         <WalletButtonMobile />
+        <button
+          type="button"
+          onClick={() => navigate('/config')}
+          aria-label="Configurações"
+          className="inline-flex items-center justify-center rounded-full bg-transparent border-none cursor-pointer text-[var(--fg-1)] hover:bg-white/[0.04] transition-colors"
+          style={{ width: 44, height: 44 }}
+        >
+          <Settings size={22} strokeWidth={1.6} />
+        </button>
         <button
         type="button"
         onClick={() => setNotifOpen((o) => !o)}
