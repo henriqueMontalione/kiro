@@ -87,7 +87,12 @@ function formatRelativeDate(iso: string): string {
 }
 
 /**
- * Returns the most recent TESOURO payments touching this wallet (sent or received).
+ * Returns the most recent TESOURO movements touching this wallet (sent or received).
+ *
+ * Uses Horizon's `effects` endpoint (not `payments`) so that contract-driven
+ * transfers — Etherfuse on-ramp/off-ramp orders go through the TESOURO SAC, not
+ * a classic Stellar payment — are captured alongside regular payments.
+ *
  * Empty array if the issuer isn't configured or Horizon is unreachable.
  */
 export async function fetchTesouroPayments(
@@ -96,29 +101,43 @@ export async function fetchTesouroPayments(
 ): Promise<WalletPayment[]> {
   if (!TESOURO_ISSUER) return [];
   try {
+    // Overfetch because effects include many non-TESOURO types (trustlines,
+    // signers, etc.). Capped at Horizon's per-request max of 200.
+    const horizonLimit = Math.min(limit * 4, 200);
     const page = await horizonServer
-      .payments()
+      .effects()
       .forAccount(publicKey)
       .order('desc')
-      .limit(limit)
+      .limit(horizonLimit)
       .call();
 
     const results: WalletPayment[] = [];
-    for (const op of page.records) {
-      if (op.type !== 'payment') continue;
-      if (!('asset_code' in op) || !('asset_issuer' in op)) continue;
-      if (op.asset_code !== TESOURO_CODE || op.asset_issuer !== TESOURO_ISSUER) continue;
+    for (const eff of page.records) {
+      const isCredit = eff.type === 'account_credited';
+      const isDebit = eff.type === 'account_debited';
+      if (!isCredit && !isDebit) continue;
 
-      const isOutgoing = op.from === publicKey;
+      const e = eff as typeof eff & {
+        amount?: string;
+        asset_code?: string;
+        asset_issuer?: string;
+      };
+      if (e.asset_code !== TESOURO_CODE || e.asset_issuer !== TESOURO_ISSUER) continue;
+      if (!e.amount) continue;
+
       results.push({
-        id: op.id,
-        hash: op.transaction_hash,
-        direction: isOutgoing ? 'out' : 'in',
-        amount: op.amount,
-        amountBRL: formatBRL(op.amount),
-        when: formatRelativeDate(op.created_at),
-        createdAt: op.created_at,
+        id: eff.id,
+        // Effects don't expose transaction_hash directly; we don't show it
+        // to end users anyway, so leave it blank.
+        hash: '',
+        direction: isCredit ? 'in' : 'out',
+        amount: e.amount,
+        amountBRL: formatBRL(e.amount),
+        when: formatRelativeDate(eff.created_at),
+        createdAt: eff.created_at,
       });
+
+      if (results.length >= limit) break;
     }
     return results;
   } catch {

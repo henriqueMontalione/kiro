@@ -137,3 +137,64 @@ export interface OrderPollResult {
 export async function getOrder(orderId: string): Promise<OrderPollResult> {
   return apiFetch<OrderPollResult>('GET', '/ef-order', undefined, { orderId });
 }
+
+// ---------------------------------------------------------------------------
+// On-ramp (BRL → TESOURO via PIX deposit)
+// ---------------------------------------------------------------------------
+
+export interface OnRampQuoteResult {
+  quoteId: string;
+  /** BRL amount the user will pay. */
+  sourceAmount: string;
+  /** TESOURO amount that will arrive in the wallet. */
+  destinationAmount: string;
+  exchangeRate: string;
+  fee: string;
+  expiresAt: string;
+}
+
+export interface OnRampOrderResult {
+  orderId: string;
+  /** BRL amount to deposit. */
+  depositAmount: string;
+  depositPixKey: string;
+  depositPixKeyType: string;
+  /** PIX BR-Code / EMV copy-paste string — encode as QR. */
+  depositPixCode: string;
+  beneficiary: string;
+}
+
+export interface OnRampPollResult {
+  orderId: string;
+  status: string;
+  /** Stellar tx hash once TESOURO has been delivered. */
+  confirmedTxSignature: string | null;
+  amountInTokens: string | null;
+  amountInFiat: string | null;
+}
+
+/** Gets a BRL→TESOURO on-ramp quote for the given BRL amount. */
+export async function getOnRampQuote(
+  customerId: string,
+  sourceAmount: string,
+): Promise<OnRampQuoteResult> {
+  return apiFetch<OnRampQuoteResult>('POST', '/ef-onramp-quote', { customerId, sourceAmount });
+}
+
+/** Creates an on-ramp order. Returns the PIX deposit details. */
+export async function createOnRampOrder(
+  quoteId: string,
+  stellarAddress: string,
+  bankAccountId: string,
+): Promise<OnRampOrderResult> {
+  return apiFetch<OnRampOrderResult>('POST', '/ef-onramp-order', {
+    quoteId,
+    stellarAddress,
+    bankAccountId,
+  });
+}
+
+/** Polls an on-ramp order. `status === 'completed'` means TESOURO has been delivered. */
+export async function getOnRampOrder(orderId: string): Promise<OnRampPollResult> {
+  return apiFetch<OnRampPollResult>('GET', '/ef-onramp-order', undefined, { orderId });
+}
