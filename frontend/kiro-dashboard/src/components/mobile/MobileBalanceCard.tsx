@@ -1,9 +1,9 @@
-import { useState } from 'react';
-import { Eye, EyeOff, Sparkles } from 'lucide-react';
+import { Eye, EyeOff, RefreshCw, Sparkles } from 'lucide-react';
 import { Card } from '../Card';
 import { Button } from '../Button';
 import { YIELD_APY_LABEL } from '@/lib/mocks';
 import { useWallet } from '@/context/WalletContext';
+import { useDashboard } from '@/context/DashboardContext';
 import { formatBRL } from '@/lib/stellar';
 
 interface MobileBalanceCardProps {
@@ -11,27 +11,39 @@ interface MobileBalanceCardProps {
 }
 
 export function MobileBalanceCard({ onReceive }: MobileBalanceCardProps) {
-  const [hidden, setHidden] = useState(false);
   const { isConnected, balance } = useWallet();
+  const { valuesHidden, toggleValuesHidden, refresh, isRefreshing } = useDashboard();
 
   const displayBalance = isConnected && balance !== null ? formatBRL(balance) : 'R$ 0,00';
-  const isBlurred = !isConnected || hidden;
+  const isBlurred = !isConnected || valuesHidden;
 
   return (
     <Card>
       <div className="flex items-center justify-between mb-3">
         <span className="k-eyebrow">Saldo Disponível</span>
         {isConnected && (
-          <button
-            type="button"
-            onClick={() => setHidden((h) => !h)}
-            aria-label={hidden ? 'Mostrar saldo' : 'Ocultar saldo'}
-            aria-pressed={hidden}
-            className="inline-flex items-center justify-center rounded-full bg-transparent border-none cursor-pointer text-[var(--fg-3)] hover:text-[var(--fg-1)] hover:bg-white/[0.04] transition-colors"
-            style={{ width: 36, height: 36 }}
-          >
-            {hidden ? <EyeOff size={18} strokeWidth={1.6} /> : <Eye size={18} strokeWidth={1.6} />}
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={refresh}
+              disabled={isRefreshing}
+              aria-label="Atualizar dados"
+              className="inline-flex items-center justify-center rounded-full bg-transparent border-none cursor-pointer text-[var(--fg-3)] hover:text-[var(--fg-1)] hover:bg-white/[0.04] transition-colors disabled:opacity-50"
+              style={{ width: 36, height: 36 }}
+            >
+              <RefreshCw size={17} strokeWidth={1.8} className={isRefreshing ? 'animate-spin' : ''} />
+            </button>
+            <button
+              type="button"
+              onClick={toggleValuesHidden}
+              aria-label={valuesHidden ? 'Mostrar saldo' : 'Ocultar saldo'}
+              aria-pressed={valuesHidden}
+              className="inline-flex items-center justify-center rounded-full bg-transparent border-none cursor-pointer text-[var(--fg-3)] hover:text-[var(--fg-1)] hover:bg-white/[0.04] transition-colors"
+              style={{ width: 36, height: 36 }}
+            >
+              {valuesHidden ? <EyeOff size={18} strokeWidth={1.6} /> : <Eye size={18} strokeWidth={1.6} />}
+            </button>
+          </div>
         )}
       </div>
 

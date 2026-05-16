@@ -3,6 +3,7 @@ import { Link2, ChevronRight } from 'lucide-react';
 import { Bar, BarChart, Cell, ResponsiveContainer } from 'recharts';
 import { Card, CardEyebrow } from '../Card';
 import { useWallet } from '@/context/WalletContext';
+import { useDashboard } from '@/context/DashboardContext';
 import { fetchTesouroPayments, formatBRL, type WalletPayment } from '@/lib/stellar';
 
 function isSameDay(iso: string, ref: Date): boolean {
@@ -15,6 +16,7 @@ function isSameDay(iso: string, ref: Date): boolean {
  */
 export function RecebimentosCard() {
   const { publicKey, balance, isConnected } = useWallet();
+  const { valuesHidden, refreshTick } = useDashboard();
   // `null` = haven't fetched yet (so we can show "—" instead of "R$ 0,00").
   const [payments, setPayments] = useState<WalletPayment[] | null>(null);
 
@@ -30,7 +32,7 @@ export function RecebimentosCard() {
       if (!cancelled) setPayments(p);
     });
     return () => { cancelled = true; };
-  }, [publicKey, balance]);
+  }, [publicKey, balance, refreshTick]);
 
   const { totalLabel, countLabel, hourly } = useMemo(() => {
     const today = new Date();
@@ -68,7 +70,16 @@ export function RecebimentosCard() {
     <Card>
       <CardEyebrow info>Recebimentos hoje</CardEyebrow>
 
-      <div className="k-money font-medium" style={{ fontSize: 30, color: 'var(--kiro-green)' }}>
+      <div
+        className="k-money font-medium"
+        style={{
+          fontSize: 30,
+          color: 'var(--kiro-green)',
+          filter: valuesHidden ? 'blur(10px)' : 'none',
+          transition: 'filter 200ms ease-out',
+          userSelect: valuesHidden ? 'none' : 'auto',
+        }}
+      >
         {totalLabel}
       </div>
       <div className="text-[12px] text-[var(--fg-3)] mt-1">{countLabel}</div>

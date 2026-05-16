@@ -2,6 +2,7 @@ import { Calendar } from 'lucide-react';
 import { Card } from '../Card';
 import { Button } from '../Button';
 import { A_RECEBER } from '@/lib/mocks';
+import { useDashboard } from '@/context/DashboardContext';
 
 interface MobileReceivablesCardProps {
   onAnticipate?: () => void;
@@ -12,6 +13,7 @@ interface MobileReceivablesCardProps {
  * info but compressed to one row + a single full-width CTA.
  */
 export function MobileReceivablesCard({ onAnticipate }: MobileReceivablesCardProps) {
+  const { valuesHidden } = useDashboard();
   return (
     <Card>
       <div className="flex items-start justify-between gap-3">
@@ -24,6 +26,9 @@ export function MobileReceivablesCard({ onAnticipate }: MobileReceivablesCardPro
               lineHeight: 1.1,
               color: 'var(--fg-1)',
               letterSpacing: '-0.01em',
+              filter: valuesHidden ? 'blur(12px)' : 'none',
+              transition: 'filter 200ms ease-out',
+              userSelect: valuesHidden ? 'none' : 'auto',
             }}
           >
             {A_RECEBER.total}

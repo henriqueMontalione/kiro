@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { ChevronRight, ShoppingBag, ArrowUpRight } from 'lucide-react';
 import { Card } from '../Card';
 import { useWallet } from '@/context/WalletContext';
+import { useDashboard } from '@/context/DashboardContext';
 import { fetchTesouroPayments, type WalletPayment } from '@/lib/stellar';
 
 interface MobileActivityCardProps {
@@ -17,6 +18,7 @@ interface MobileActivityCardProps {
  */
 export function MobileActivityCard({ onSeeAll, limit = 3 }: MobileActivityCardProps) {
   const { publicKey, balance, isConnected } = useWallet();
+  const { valuesHidden, refreshTick } = useDashboard();
   // `null` = pending fetch. `[]` = fetched but empty.
   const [payments, setPayments] = useState<WalletPayment[] | null>(null);
 
@@ -30,7 +32,7 @@ export function MobileActivityCard({ onSeeAll, limit = 3 }: MobileActivityCardPr
       if (!cancelled) setPayments(p);
     });
     return () => { cancelled = true; };
-  }, [publicKey, balance, limit]);
+  }, [publicKey, balance, limit, refreshTick]);
 
   return (
     <Card>
@@ -63,7 +65,7 @@ export function MobileActivityCard({ onSeeAll, limit = 3 }: MobileActivityCardPr
       <ul className="flex flex-col gap-1 list-none m-0 p-0">
         {payments?.map((p) => (
           <li key={p.id}>
-            <ActivityRow payment={p} />
+            <ActivityRow payment={p} valuesHidden={valuesHidden} />
           </li>
         ))}
       </ul>
@@ -104,7 +106,7 @@ function MobileSkeleton({ count }: { count: number }) {
   );
 }
 
-function ActivityRow({ payment }: { payment: WalletPayment }) {
+function ActivityRow({ payment, valuesHidden }: { payment: WalletPayment; valuesHidden: boolean }) {
   const isOut = payment.direction === 'out';
   const Icon = isOut ? ArrowUpRight : ShoppingBag;
   const label = isOut ? 'Saque via PIX' : 'Pagamento recebido';
@@ -130,7 +132,12 @@ function ActivityRow({ payment }: { payment: WalletPayment }) {
       </div>
       <span
         className="k-money text-[14px] font-medium whitespace-nowrap"
-        style={{ color: amountColor }}
+        style={{
+          color: amountColor,
+          filter: valuesHidden ? 'blur(6px)' : 'none',
+          transition: 'filter 200ms ease-out',
+          userSelect: valuesHidden ? 'none' : 'auto',
+        }}
       >
         {isOut ? '− ' : '+ '}
         {payment.amountBRL}

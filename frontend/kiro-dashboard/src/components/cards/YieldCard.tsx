@@ -11,6 +11,7 @@ import {
 import { Card, CardEyebrow } from '../Card';
 import { StatusTag } from '../StatusTag';
 import { YIELD } from '@/lib/mocks';
+import { useDashboard } from '@/context/DashboardContext';
 
 /**
  * "Rendimento Acumulado" card. Big +R$ number, trend chip, area chart, and
@@ -20,13 +21,21 @@ import { YIELD } from '@/lib/mocks';
  * colors that pull from the design-system tokens.
  */
 export function YieldCard() {
+  const { valuesHidden } = useDashboard();
   return (
     <Card className="min-h-[290px]">
       <CardEyebrow info>Rendimento Acumulado</CardEyebrow>
 
       <div
         className="k-money font-medium"
-        style={{ fontSize: 38, color: 'var(--kiro-green)', letterSpacing: '-0.01em' }}
+        style={{
+          fontSize: 38,
+          color: 'var(--kiro-green)',
+          letterSpacing: '-0.01em',
+          filter: valuesHidden ? 'blur(12px)' : 'none',
+          transition: 'filter 200ms ease-out',
+          userSelect: valuesHidden ? 'none' : 'auto',
+        }}
       >
         {YIELD.accumulated}
       </div>

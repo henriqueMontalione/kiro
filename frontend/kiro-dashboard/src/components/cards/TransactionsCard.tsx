@@ -4,6 +4,7 @@ import { Card, CardEyebrow } from '../Card';
 import { StatusTag, type Status } from '../StatusTag';
 import type { Transaction } from '@/types';
 import { useWallet } from '@/context/WalletContext';
+import { useDashboard } from '@/context/DashboardContext';
 import { fetchTesouroPayments, type WalletPayment } from '@/lib/stellar';
 
 interface TransactionsCardProps {
@@ -13,11 +14,13 @@ interface TransactionsCardProps {
 /** "Transações Recentes" — most recent TESOURO movements from Horizon. */
 export function TransactionsCard({ onSeeAll }: TransactionsCardProps) {
   const { publicKey, balance, isConnected } = useWallet();
+  const { valuesHidden, refreshTick } = useDashboard();
   // `null` = haven't fetched yet (show skeleton). `[]` = fetched but empty.
   const [payments, setPayments] = useState<WalletPayment[] | null>(null);
 
   // Re-fetch when wallet changes OR when balance changes (e.g. after an
-  // off-ramp completes and refreshBalance fires 6s later).
+  // off-ramp completes and refreshBalance fires 6s later), OR when the
+  // user manually triggers a refresh from the toolbar.
   useEffect(() => {
     if (!publicKey) {
       setPayments(null);
@@ -28,7 +31,7 @@ export function TransactionsCard({ onSeeAll }: TransactionsCardProps) {
       if (!cancelled) setPayments(p);
     });
     return () => { cancelled = true; };
-  }, [publicKey, balance]);
+  }, [publicKey, balance, refreshTick]);
 
   return (
     <Card className="!p-[18px]">
@@ -55,7 +58,7 @@ export function TransactionsCard({ onSeeAll }: TransactionsCardProps) {
           <EmptyState message="Nenhuma movimentação registrada ainda." />
         )}
         {payments?.map((p) => (
-          <WalletPaymentRow key={p.id} payment={p} />
+          <WalletPaymentRow key={p.id} payment={p} valuesHidden={valuesHidden} />
         ))}
       </div>
     </Card>
@@ -112,7 +115,7 @@ function EmptyState({ message }: { message: string }) {
   );
 }
 
-function WalletPaymentRow({ payment }: { payment: WalletPayment }) {
+function WalletPaymentRow({ payment, valuesHidden }: { payment: WalletPayment; valuesHidden: boolean }) {
   const isOut = payment.direction === 'out';
   const Icon = isOut ? ArrowUpRight : ShoppingBag;
   const label = isOut ? 'Saque via PIX' : 'Pagamento recebido';
@@ -140,7 +143,12 @@ function WalletPaymentRow({ payment }: { payment: WalletPayment }) {
       <div className="text-[14px] text-[var(--fg-1)] font-medium">{label}</div>
       <div
         className="k-money text-[14px] text-right"
-        style={{ color: isOut ? '#FF4D6D' : 'var(--fg-1)' }}
+        style={{
+          color: isOut ? '#FF4D6D' : 'var(--fg-1)',
+          filter: valuesHidden ? 'blur(6px)' : 'none',
+          transition: 'filter 200ms ease-out',
+          userSelect: valuesHidden ? 'none' : 'auto',
+        }}
       >
         {isOut ? '− ' : '+ '}
         {payment.amountBRL}
