@@ -5,7 +5,7 @@
 export function KiroLogo({ size = 28, showWord = true }: { size?: number; showWord?: boolean }) {
   return (
     <span className="inline-flex items-center gap-[10px] text-[var(--fg-1)]">
-      <img src="/kiro-logo.svg" width={size} height={size} alt="" />
+      <img src="/KIRO-v1.svg" width={size} height={size} alt="" />
       {showWord && (
         <span
           className="font-display font-bold uppercase"
