@@ -71,15 +71,27 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         kit.setWallet(option.id);
         kitRef.current = kit;
         setIsLoading(true);
+
+        let address: string;
         try {
-          const { address } = await kit.getAddress();
-          setPublicKey(address);
+          address = (await kit.getAddress()).address;
+        } catch (err) {
+          console.error('[Wallet] Failed to get address:', err);
+          setIsLoading(false);
+          return;
+        }
+
+        // Unblock the UI as soon as the address is known. Balance fetches in
+        // the background so the dashboard (and downstream cards like
+        // TransactionsCard) can start their own queries in parallel.
+        setPublicKey(address);
+        setIsLoading(false);
+
+        try {
           const bal = await fetchTesouroBalance(address);
           setBalance(bal);
         } catch (err) {
-          console.error('[Wallet] Failed to get address:', err);
-        } finally {
-          setIsLoading(false);
+          console.error('[Wallet] Failed to fetch balance:', err);
         }
       },
     });

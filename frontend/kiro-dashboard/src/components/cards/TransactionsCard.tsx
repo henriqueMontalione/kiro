@@ -1,15 +1,35 @@
-import { ChevronRight, ShoppingBag, ShoppingCart, ArrowLeftRight } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { ChevronRight, ShoppingBag, ShoppingCart, ArrowLeftRight, ArrowUpRight } from 'lucide-react';
 import { Card, CardEyebrow } from '../Card';
 import { StatusTag, type Status } from '../StatusTag';
-import { RECENT_TX } from '@/lib/mocks';
 import type { Transaction } from '@/types';
+import { useWallet } from '@/context/WalletContext';
+import { fetchTesouroPayments, type WalletPayment } from '@/lib/stellar';
 
 interface TransactionsCardProps {
   onSeeAll: () => void;
 }
 
-/** "Transações Recentes" — top 5 rows from the mocks. */
+/** "Transações Recentes" — most recent TESOURO movements from Horizon. */
 export function TransactionsCard({ onSeeAll }: TransactionsCardProps) {
+  const { publicKey, balance, isConnected } = useWallet();
+  // `null` = haven't fetched yet (show skeleton). `[]` = fetched but empty.
+  const [payments, setPayments] = useState<WalletPayment[] | null>(null);
+
+  // Re-fetch when wallet changes OR when balance changes (e.g. after an
+  // off-ramp completes and refreshBalance fires 6s later).
+  useEffect(() => {
+    if (!publicKey) {
+      setPayments(null);
+      return;
+    }
+    let cancelled = false;
+    fetchTesouroPayments(publicKey, 5).then((p) => {
+      if (!cancelled) setPayments(p);
+    });
+    return () => { cancelled = true; };
+  }, [publicKey, balance]);
+
   return (
     <Card className="!p-[18px]">
       <CardEyebrow
@@ -27,11 +47,109 @@ export function TransactionsCard({ onSeeAll }: TransactionsCardProps) {
       </CardEyebrow>
 
       <div className="flex flex-col gap-[2px]">
-        {RECENT_TX.map((tx) => (
-          <TxRow key={tx.id} tx={tx} />
+        {!isConnected && (
+          <EmptyState message="Conecte sua carteira para ver suas movimentações." />
+        )}
+        {isConnected && payments === null && <SkeletonRows count={3} />}
+        {isConnected && payments && payments.length === 0 && (
+          <EmptyState message="Nenhuma movimentação registrada ainda." />
+        )}
+        {payments?.map((p) => (
+          <WalletPaymentRow key={p.id} payment={p} />
         ))}
       </div>
     </Card>
+  );
+}
+
+function SkeletonRows({ count }: { count: number }) {
+  return (
+    <>
+      {Array.from({ length: count }).map((_, i) => (
+        <div
+          key={i}
+          className="grid items-center rounded-[12px]"
+          style={{
+            gridTemplateColumns: '36px 1fr auto 110px 100px',
+            gap: 16,
+            padding: '14px 12px',
+          }}
+        >
+          <div
+            className="rounded-[10px] animate-pulse"
+            style={{ width: 36, height: 36, background: 'rgba(255,255,255,0.04)' }}
+          />
+          <div
+            className="rounded animate-pulse"
+            style={{ height: 14, width: '60%', background: 'rgba(255,255,255,0.04)' }}
+          />
+          <div
+            className="rounded animate-pulse"
+            style={{ height: 14, width: 90, background: 'rgba(255,255,255,0.04)' }}
+          />
+          <div
+            className="rounded animate-pulse"
+            style={{ height: 22, width: 90, background: 'rgba(255,255,255,0.04)' }}
+          />
+          <div
+            className="rounded animate-pulse"
+            style={{ height: 12, width: 80, background: 'rgba(255,255,255,0.04)' }}
+          />
+        </div>
+      ))}
+    </>
+  );
+}
+
+function EmptyState({ message }: { message: string }) {
+  return (
+    <div
+      className="text-center text-[var(--fg-3)] text-[13px]"
+      style={{ padding: '32px 12px' }}
+    >
+      {message}
+    </div>
+  );
+}
+
+function WalletPaymentRow({ payment }: { payment: WalletPayment }) {
+  const isOut = payment.direction === 'out';
+  const Icon = isOut ? ArrowUpRight : ShoppingBag;
+  const label = isOut ? 'Saque via PIX' : 'Pagamento recebido';
+
+  return (
+    <div
+      className="grid items-center cursor-pointer rounded-[12px] transition-colors duration-[var(--dur-fast)] ease-[var(--ease-out)] hover:bg-white/[0.03]"
+      style={{
+        gridTemplateColumns: '36px 1fr auto 110px 100px',
+        gap: 16,
+        padding: '14px 12px',
+      }}
+    >
+      <div
+        className="flex items-center justify-center rounded-[10px]"
+        style={{
+          width: 36,
+          height: 36,
+          background: isOut ? 'rgba(123,44,191,0.16)' : 'rgba(0,255,135,0.10)',
+          color: isOut ? '#C99EFA' : 'var(--kiro-green)',
+        }}
+      >
+        <Icon size={18} strokeWidth={1.6} />
+      </div>
+      <div className="text-[14px] text-[var(--fg-1)] font-medium">{label}</div>
+      <div
+        className="k-money text-[14px] text-right"
+        style={{ color: isOut ? '#FF4D6D' : 'var(--fg-1)' }}
+      >
+        {isOut ? '− ' : '+ '}
+        {payment.amountBRL}
+      </div>
+      <div>
+        <StatusTag status="success">Concluído</StatusTag>
+      </div>
+      <div className="k-money text-[11px] text-[var(--fg-3)] text-right">{payment.when}</div>
+    </div>
   );
 }
 

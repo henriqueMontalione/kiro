@@ -1,7 +1,8 @@
-import { ChevronRight, ShoppingBag, Zap, ArrowLeftRight } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { ChevronRight, ShoppingBag, ArrowUpRight } from 'lucide-react';
 import { Card } from '../Card';
-import { RECENT_TX } from '@/lib/mocks';
-import type { Transaction } from '@/types';
+import { useWallet } from '@/context/WalletContext';
+import { fetchTesouroPayments, type WalletPayment } from '@/lib/stellar';
 
 interface MobileActivityCardProps {
   onSeeAll: () => void;
@@ -10,13 +11,26 @@ interface MobileActivityCardProps {
 }
 
 /**
- * Condensed "Atividade Recente" list for the mobile home. Each row shows
- * a circled icon, label + when, and the signed amount in mono. Order ids
- * and status tags are intentionally hidden here — they live on the full
- * Transações screen reachable from "Ver todas".
+ * Condensed "Atividade Recente" list for the mobile home. Pulls the most recent
+ * TESOURO movements from Horizon and labels them as "Saque via PIX" (outgoing)
+ * or "Pagamento via PIX" (incoming).
  */
 export function MobileActivityCard({ onSeeAll, limit = 3 }: MobileActivityCardProps) {
-  const rows = RECENT_TX.slice(0, limit);
+  const { publicKey, balance, isConnected } = useWallet();
+  // `null` = pending fetch. `[]` = fetched but empty.
+  const [payments, setPayments] = useState<WalletPayment[] | null>(null);
+
+  useEffect(() => {
+    if (!publicKey) {
+      setPayments(null);
+      return;
+    }
+    let cancelled = false;
+    fetchTesouroPayments(publicKey, limit).then((p) => {
+      if (!cancelled) setPayments(p);
+    });
+    return () => { cancelled = true; };
+  }, [publicKey, balance, limit]);
 
   return (
     <Card>
@@ -34,10 +48,22 @@ export function MobileActivityCard({ onSeeAll, limit = 3 }: MobileActivityCardPr
         </button>
       </div>
 
+      {!isConnected && (
+        <div className="text-center text-[var(--fg-3)] text-[13px]" style={{ padding: '16px 0' }}>
+          Conecte sua carteira para ver suas movimentações.
+        </div>
+      )}
+      {isConnected && payments === null && <MobileSkeleton count={limit} />}
+      {isConnected && payments && payments.length === 0 && (
+        <div className="text-center text-[var(--fg-3)] text-[13px]" style={{ padding: '16px 0' }}>
+          Nenhuma movimentação registrada ainda.
+        </div>
+      )}
+
       <ul className="flex flex-col gap-1 list-none m-0 p-0">
-        {rows.map((tx) => (
-          <li key={tx.id}>
-            <ActivityRow tx={tx} />
+        {payments?.map((p) => (
+          <li key={p.id}>
+            <ActivityRow payment={p} />
           </li>
         ))}
       </ul>
@@ -45,23 +71,47 @@ export function MobileActivityCard({ onSeeAll, limit = 3 }: MobileActivityCardPr
   );
 }
 
-function ActivityRow({ tx }: { tx: Transaction }) {
-  const isRefund = tx.status === 'danger';
-  const isPending = tx.status === 'pending';
-  const isGreen = tx.accent === 'green';
-  const Icon = isRefund ? ArrowLeftRight : isPending ? Zap : ShoppingBag;
+function MobileSkeleton({ count }: { count: number }) {
+  return (
+    <ul className="flex flex-col gap-1 list-none m-0 p-0">
+      {Array.from({ length: count }).map((_, i) => (
+        <li
+          key={i}
+          className="flex items-center gap-3 rounded-[12px]"
+          style={{ padding: '10px 4px', minHeight: 56 }}
+        >
+          <div
+            className="rounded-[10px] animate-pulse flex-shrink-0"
+            style={{ width: 36, height: 36, background: 'rgba(255,255,255,0.04)' }}
+          />
+          <div className="flex flex-col gap-2 flex-1">
+            <div
+              className="rounded animate-pulse"
+              style={{ height: 12, width: '60%', background: 'rgba(255,255,255,0.04)' }}
+            />
+            <div
+              className="rounded animate-pulse"
+              style={{ height: 10, width: '40%', background: 'rgba(255,255,255,0.04)' }}
+            />
+          </div>
+          <div
+            className="rounded animate-pulse"
+            style={{ height: 14, width: 80, background: 'rgba(255,255,255,0.04)' }}
+          />
+        </li>
+      ))}
+    </ul>
+  );
+}
 
-  const iconBg = isRefund
-    ? 'rgba(255,77,109,0.10)'
-    : isGreen
-      ? 'rgba(0,255,135,0.10)'
-      : 'rgba(123,44,191,0.16)';
-  const iconColor = isRefund ? '#FF4D6D' : isGreen ? 'var(--kiro-green)' : '#C99EFA';
-  const amountColor = isRefund
-    ? '#FF4D6D'
-    : tx.amount.trim().startsWith('+')
-      ? 'var(--kiro-green)'
-      : 'var(--fg-1)';
+function ActivityRow({ payment }: { payment: WalletPayment }) {
+  const isOut = payment.direction === 'out';
+  const Icon = isOut ? ArrowUpRight : ShoppingBag;
+  const label = isOut ? 'Saque via PIX' : 'Pagamento recebido';
+
+  const iconBg = isOut ? 'rgba(123,44,191,0.16)' : 'rgba(0,255,135,0.10)';
+  const iconColor = isOut ? '#C99EFA' : 'var(--kiro-green)';
+  const amountColor = isOut ? '#FF4D6D' : 'var(--kiro-green)';
 
   return (
     <div
@@ -75,14 +125,15 @@ function ActivityRow({ tx }: { tx: Transaction }) {
         <Icon size={18} strokeWidth={1.6} />
       </div>
       <div className="flex flex-col min-w-0 flex-1">
-        <span className="text-[14px] text-[var(--fg-1)] font-medium truncate">{tx.label}</span>
-        <span className="k-money text-[12px] text-[var(--fg-3)]">{tx.when}</span>
+        <span className="text-[14px] text-[var(--fg-1)] font-medium truncate">{label}</span>
+        <span className="k-money text-[12px] text-[var(--fg-3)]">{payment.when}</span>
       </div>
       <span
         className="k-money text-[14px] font-medium whitespace-nowrap"
         style={{ color: amountColor }}
       >
-        {tx.amount.trim().startsWith('-') ? tx.amount : `+ ${tx.amount}`}
+        {isOut ? '− ' : '+ '}
+        {payment.amountBRL}
       </span>
     </div>
   );

@@ -50,3 +50,78 @@ export async function submitXdr(signedXdr: string): Promise<string> {
   const result = await horizonServer.submitTransaction(tx);
   return result.hash;
 }
+
+export interface WalletPayment {
+  /** Horizon operation ID. */
+  id: string;
+  /** Stellar transaction hash. */
+  hash: string;
+  /** `out` = TESOURO leaving the wallet (saque via PIX). `in` = TESOURO arriving (pagamento). */
+  direction: 'in' | 'out';
+  /** Raw decimal string (e.g. "100.0000000"). */
+  amount: string;
+  /** Pre-formatted BRL value, e.g. "R$ 100,00". */
+  amountBRL: string;
+  /** Localized relative timestamp: "Hoje, 14:32" / "Ontem, 18:45" / "12 jan, 14:32". */
+  when: string;
+  /** ISO 8601 creation timestamp from Horizon. */
+  createdAt: string;
+}
+
+function formatRelativeDate(iso: string): string {
+  const date = new Date(iso);
+  const now = new Date();
+  const time = date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+
+  const isToday = date.toDateString() === now.toDateString();
+  if (isToday) return `Hoje, ${time}`;
+
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  if (date.toDateString() === yesterday.toDateString()) return `Ontem, ${time}`;
+
+  const dateStr = date
+    .toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })
+    .replace('.', '');
+  return `${dateStr}, ${time}`;
+}
+
+/**
+ * Returns the most recent TESOURO payments touching this wallet (sent or received).
+ * Empty array if the issuer isn't configured or Horizon is unreachable.
+ */
+export async function fetchTesouroPayments(
+  publicKey: string,
+  limit = 10,
+): Promise<WalletPayment[]> {
+  if (!TESOURO_ISSUER) return [];
+  try {
+    const page = await horizonServer
+      .payments()
+      .forAccount(publicKey)
+      .order('desc')
+      .limit(limit)
+      .call();
+
+    const results: WalletPayment[] = [];
+    for (const op of page.records) {
+      if (op.type !== 'payment') continue;
+      if (!('asset_code' in op) || !('asset_issuer' in op)) continue;
+      if (op.asset_code !== TESOURO_CODE || op.asset_issuer !== TESOURO_ISSUER) continue;
+
+      const isOutgoing = op.from === publicKey;
+      results.push({
+        id: op.id,
+        hash: op.transaction_hash,
+        direction: isOutgoing ? 'out' : 'in',
+        amount: op.amount,
+        amountBRL: formatBRL(op.amount),
+        when: formatRelativeDate(op.created_at),
+        createdAt: op.created_at,
+      });
+    }
+    return results;
+  } catch {
+    return [];
+  }
+}
