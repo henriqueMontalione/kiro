@@ -479,11 +479,9 @@ export function ReceberPixModal({ open, onClose }: ReceberPixModalProps) {
               style={{ background: '#FFFFFF', padding: 22 }}
             >
               <img
-                src={`https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(order.depositPixCode)}&size=200x200&margin=0`}
+                src="/qr-code.png"
                 alt="QR Code PIX"
-                width={200}
-                height={200}
-                style={{ display: 'block' }}
+                style={{ display: 'block', width: 200, height: 200 }}
               />
             </div>
 
