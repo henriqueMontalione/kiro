@@ -95,10 +95,10 @@ export const NAV_ITEMS: NavItem[] = [
   { id: 'transacoes', label: 'Transações', icon: 'ArrowLeftRight', to: '/transacoes' },
   { id: 'recebimentos', label: 'Recebimentos', icon: 'QrCode', to: '/recebimentos' },
   { id: 'extrato', label: 'Extrato', icon: 'ReceiptText', to: '/extrato' },
-  { id: 'links', label: 'Links de Pagamento', icon: 'Link2', to: '/links' },
-  { id: 'clientes', label: 'Clientes', icon: 'Users', to: '/clientes' },
-  { id: 'relatorios', label: 'Relatórios', icon: 'BarChart3', to: '/relatorios' },
-  { id: 'integracoes', label: 'Integrações', icon: 'Puzzle', to: '/integracoes' },
+  // { id: 'links', label: 'Links de Pagamento', icon: 'Link2', to: '/links' },
+  // { id: 'clientes', label: 'Clientes', icon: 'Users', to: '/clientes' },
+  // { id: 'relatorios', label: 'Relatórios', icon: 'BarChart3', to: '/relatorios' },
+  // { id: 'integracoes', label: 'Integrações', icon: 'Puzzle', to: '/integracoes' },
   { id: 'config', label: 'Configurações', icon: 'Settings', to: '/config' },
 ];
 
