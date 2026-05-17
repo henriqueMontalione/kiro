@@ -1,0 +1,19 @@
+[build]
+  base    = "frontend/kiro-dashboard"
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "20"
+  # This repo is Vite + React, not Next.js. Netlify auto-attached
+  # @netlify/plugin-nextjs caused failed deploys looking for a
+  # missing .next/ output directory — opt out explicitly.
+  NETLIFY_NEXT_PLUGIN_SKIP = "true"
+
+# React Router needs every path to serve index.html so client-side
+# routing handles the URL. Without this, refreshing on /transacoes
+# returns a 404 because Netlify looks for a literal file on disk.
+[[redirects]]
+  from   = "/*"
+  to     = "/index.html"
+  status = 200

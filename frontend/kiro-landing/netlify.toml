@@ -1,0 +1,19 @@
+[build]
+  base    = "frontend/kiro-landing"
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "20"
+  # This repo is Vite + React, not Next.js. Netlify auto-attached
+  # @netlify/plugin-nextjs caused failed deploys on kiro-dashboard
+  # looking for a missing .next/ output directory — opt out explicitly.
+  NETLIFY_NEXT_PLUGIN_SKIP = "true"
+
+# Single-page landing — no client-side routing today, but if a section
+# anchor like /sobre is ever linked from outside, the fallback ensures
+# Netlify returns index.html instead of a literal 404.
+[[redirects]]
+  from   = "/*"
+  to     = "/index.html"
+  status = 200

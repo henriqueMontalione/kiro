@@ -1,0 +1,147 @@
+/* =============================================================================
+   KIRO • Design Tokens (landing)
+   Mirrors frontend/kiro-dashboard/src/styles/tokens.css 1:1 — keep in sync if
+   the design system evolves.
+============================================================================= */
+
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap');
+
+/* Roboto Mono is loaded from /public/fonts when present — falls back to
+   JetBrains Mono / ui-monospace otherwise. */
+@font-face {
+  font-family: 'Roboto Mono';
+  src:
+    url('/fonts/RobotoMono-VariableFont_wght.ttf') format('truetype-variations'),
+    url('/fonts/RobotoMono-VariableFont_wght.ttf') format('truetype');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  /* ---------- CORE BRAND COLORS ---------- */
+  --kiro-green: #00ff87;
+  --kiro-green-soft: #1fbd75;
+  --kiro-green-dim: #0b3d29;
+  --kiro-purple: #7b2cbf;
+  --kiro-purple-soft: #9d4edd;
+  --kiro-purple-dim: #2a1244;
+  --kiro-black: #0a0b10;
+  --kiro-white: #ffffff;
+  --kiro-slate: #8e92a3;
+
+  /* ---------- NEUTRAL SCALE (DARK MODE FIRST) ---------- */
+  --bg-0: #0a0b10;
+  --bg-1: #11131c;
+  --bg-2: #161924;
+  --bg-3: #1e2230;
+  --bg-4: #2a2f40;
+
+  /* ---------- TEXT ---------- */
+  --fg-1: #ffffff;
+  --fg-2: #c4c7d4;
+  --fg-3: #8e92a3;
+  --fg-4: #5a5e6e;
+  --fg-on-green: #06241a;
+
+  /* ---------- BORDERS ---------- */
+  --stroke-1: rgba(255, 255, 255, 0.06);
+  --stroke-2: rgba(255, 255, 255, 0.1);
+  --stroke-3: rgba(255, 255, 255, 0.16);
+  --stroke-green: rgba(0, 255, 135, 0.3);
+  --stroke-purple: rgba(123, 44, 191, 0.4);
+
+  /* ---------- SEMANTIC ---------- */
+  --success: #00ff87;
+  --success-bg: rgba(0, 255, 135, 0.08);
+  --warning: #ffb547;
+  --warning-bg: rgba(255, 181, 71, 0.1);
+  --danger: #ff4d6d;
+  --danger-bg: rgba(255, 77, 109, 0.1);
+  --info: #5bb6ff;
+  --info-bg: rgba(91, 182, 255, 0.1);
+
+  /* ---------- GLASS ---------- */
+  --glass-bg: rgba(255, 255, 255, 0.04);
+  --glass-bg-strong: rgba(255, 255, 255, 0.06);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-blur: blur(20px) saturate(140%);
+
+  /* ---------- GRADIENTS ---------- */
+  --gradient-stellar: linear-gradient(135deg, #00ff87 0%, #7b2cbf 100%);
+  --gradient-stellar-soft: linear-gradient(
+    135deg,
+    rgba(0, 255, 135, 0.18) 0%,
+    rgba(123, 44, 191, 0.18) 100%
+  );
+  --gradient-glow-green: radial-gradient(circle at 50% 50%, rgba(0, 255, 135, 0.35), transparent 60%);
+  --gradient-glow-purple: radial-gradient(circle at 50% 50%, rgba(123, 44, 191, 0.3), transparent 60%);
+
+  /* ---------- RADII ---------- */
+  --radius-xs: 6px;
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --radius-xl: 28px;
+  --radius-pill: 999px;
+
+  /* ---------- SPACING ---------- */
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 20px;
+  --s-6: 24px;
+  --s-7: 32px;
+  --s-8: 40px;
+  --s-9: 48px;
+  --s-10: 64px;
+  --s-11: 80px;
+
+  /* ---------- ELEVATION ---------- */
+  --shadow-1: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-2: 0 4px 16px rgba(0, 0, 0, 0.45);
+  --shadow-3: 0 12px 40px rgba(0, 0, 0, 0.55);
+  --shadow-glow-green: 0 0 24px rgba(0, 255, 135, 0.35), 0 0 0 1px rgba(0, 255, 135, 0.3);
+  --shadow-glow-purple: 0 0 28px rgba(123, 44, 191, 0.4);
+
+  /* ---------- MOTION ---------- */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --dur-fast: 120ms;
+  --dur-base: 200ms;
+  --dur-slow: 360ms;
+
+  /* ---------- TYPE ---------- */
+  --font-display: 'Space Grotesk', 'Inter', system-ui, -apple-system, sans-serif;
+  --font-sans: 'Inter', 'Space Grotesk', system-ui, -apple-system, sans-serif;
+  --font-mono: 'Roboto Mono', 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --fs-display-xl: 72px;
+  --fs-display-lg: 56px;
+  --fs-display: 44px;
+  --fs-h1: 32px;
+  --fs-h2: 24px;
+  --fs-h3: 20px;
+  --fs-h4: 18px;
+  --fs-body: 15px;
+  --fs-body-sm: 13px;
+  --fs-caption: 12px;
+  --fs-micro: 11px;
+
+  --lh-tight: 1.05;
+  --lh-snug: 1.2;
+  --lh-base: 1.5;
+  --lh-loose: 1.65;
+
+  --tracking-tight: -0.02em;
+  --tracking-snug: -0.01em;
+  --tracking-normal: 0;
+  --tracking-wide: 0.04em;
+  --tracking-eyebrow: 0.14em;
+}
+
+::selection {
+  background: rgba(0, 255, 135, 0.3);
+  color: var(--fg-1);
+}

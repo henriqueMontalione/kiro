@@ -1,0 +1,89 @@
+@import './styles/tokens.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html,
+  body,
+  #root {
+    margin: 0;
+    height: 100%;
+    background: var(--bg-0);
+    color: var(--fg-1);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  button {
+    font-family: inherit;
+  }
+
+  /* Scrollbar polish for dark surfaces */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 999px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}
+
+/* Stellar Wallets Kit modal — the custom element must have a stacking context
+   in the light DOM so its shadow content renders above our fixed navigation
+   (MobileBottomNav z-40, MobileHeader z-30). The internal dialog already uses
+   position:fixed / z-index:990 inside the shadow root, which is unaffected. */
+stellar-wallets-modal {
+  position: relative;
+  z-index: 9999;
+}
+
+@layer components {
+  /* Mono / money helpers — used everywhere financial data shows up. */
+  .k-money {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: var(--tracking-snug);
+  }
+
+  .k-eyebrow {
+    font-family: var(--font-display);
+    font-size: var(--fs-caption);
+    font-weight: 500;
+    letter-spacing: var(--tracking-eyebrow);
+    text-transform: uppercase;
+    color: var(--fg-3);
+  }
+
+  .k-h1 {
+    font-family: var(--font-display);
+    font-size: var(--fs-h1);
+    font-weight: 600;
+    line-height: var(--lh-snug);
+    letter-spacing: var(--tracking-tight);
+    color: var(--fg-1);
+    margin: 0;
+  }
+
+  .k-h2 {
+    font-family: var(--font-display);
+    font-size: var(--fs-h2);
+    font-weight: 600;
+    line-height: var(--lh-snug);
+    letter-spacing: var(--tracking-tight);
+    color: var(--fg-1);
+    margin: 0;
+  }
+}

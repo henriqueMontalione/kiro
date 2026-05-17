@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="Layer_2" data-name="Layer 2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 846.82 846.82">
+  <defs>
+    <style>
+      .cls-1 {
+        fill: #00ff87;
+      }
+
+      .cls-2 {
+        fill: #fff;
+      }
+
+      .cls-3 {
+        fill: #0a0b10;
+      }
+    </style>
+  </defs>
+  <g id="KIRO-v1">
+    <g id="KIRO-v1-2" data-name="KIRO-v1">
+      <rect id="BG" class="cls-3" width="846.82" height="846.82"/>
+      <path id="K2" class="cls-1" d="M421.85,549.56l67.91-67.91,199.06,199.06h-136.14s-130.52-131.46-130.83-131.15Z"/>
+      <path id="K1" class="cls-2" d="M169.38,167.91h84.93v304.76l304.44-304.44h122.71L166.78,682.92V167.86s2.59.06,2.6.06Z"/>
+    </g>
+  </g>
+</svg>

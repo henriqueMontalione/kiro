@@ -18,6 +18,15 @@ out/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+logs
+*.log
+pnpm-debug.log*
+lerna-debug.log*
+*.tsbuildinfo
+*tailwind.config.d.ts
+*tailwind.config.js
+*vite.config.d.ts
+*vite.config.js
 
 # Contracts
 target/
@@ -30,10 +39,25 @@ Thumbs.db
 desktop.ini
 
 # IDEs
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
 .vscode/
 .idea/
 *.swp
 *.swo
+
+# Build / cache extras
+.vite/
+.eslintcache
+.stylelintcache
+coverage/
 
 # Tests
 *.out
