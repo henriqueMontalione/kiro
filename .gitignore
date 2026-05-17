@@ -53,6 +53,12 @@ desktop.ini
 *.swp
 *.swo
 
+# Build / cache extras
+.vite/
+.eslintcache
+.stylelintcache
+coverage/
+
 # Tests
 *.out
 *.coverprofile
