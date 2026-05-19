@@ -13,21 +13,38 @@ import { useWallet } from '@/context/WalletContext';
 import { useUserProfile } from '@/context/UserProfileContext';
 import { truncateKey } from '@/lib/stellar';
 
+/** Reads `window.isSecureContext` for HTTPS / localhost checks. False on bare-IP HTTP. */
+function isInsecureContext(): boolean {
+  return typeof window !== 'undefined' && window.isSecureContext === false;
+}
+
+function primarySubtitle(opts: {
+  passkeySupported: boolean;
+  hasPasskeyWallet: boolean;
+}): string {
+  if (isInsecureContext()) {
+    return 'Passkeys requerem HTTPS — use localhost ou kiropay.netlify.app';
+  }
+  if (!opts.passkeySupported) {
+    return 'Não suportado neste navegador';
+  }
+  return opts.hasPasskeyWallet
+    ? 'Use a passkey deste dispositivo'
+    : 'Biometria, sem seedphrase';
+}
+
 /**
- * Desktop variant — full pill with address + status when connected,
- * "Entrar / Criar conta" chooser when not.
+ * Desktop variant — full pill when connected, primary "Entrar / Criar conta"
+ * with a chevron dropdown for the forget option when not.
  */
 export function WalletButton() {
   const {
     isConnected,
     publicKey,
     isLoading,
-    walletType,
     hasPasskeyWallet,
     passkeySupported,
     connect,
-    createPasskeyAccount,
-    loginWithPasskey,
     disconnect,
     forgetPasskeyAccount,
   } = useWallet();
@@ -37,7 +54,6 @@ export function WalletButton() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
 
-  // Click-outside + ESC to close
   useEffect(() => {
     if (!menuOpen) return;
     const onDocClick = (e: MouseEvent) => {
@@ -60,11 +76,7 @@ export function WalletButton() {
     setErrorMsg(null);
     setMenuOpen(false);
     try {
-      if (hasPasskeyWallet) {
-        await loginWithPasskey();
-      } else {
-        await createPasskeyAccount(profile.name);
-      }
+      await connect(profile.name);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Erro ao autenticar.';
       setErrorMsg(msg);
@@ -72,14 +84,12 @@ export function WalletButton() {
     }
   }
 
-  function handleKitConnect() {
-    setMenuOpen(false);
-    setErrorMsg(null);
-    connect();
-  }
-
   function handleForget() {
-    if (!confirm('Esquecer esta conta passkey? Sem a sincronização do passkey você não conseguirá recuperar o acesso.')) {
+    if (
+      !confirm(
+        'Esquecer esta conta passkey? Sem a sincronização do passkey você não conseguirá recuperar o acesso.',
+      )
+    ) {
       return;
     }
     setMenuOpen(false);
@@ -99,14 +109,7 @@ export function WalletButton() {
     return (
       <div className="inline-flex items-center gap-1 rounded-full border border-[var(--stroke-green)] bg-[var(--success-bg)]">
         <div className="inline-flex items-center gap-2 pl-3 pr-2 py-[6px] font-sans text-[13px] text-[var(--kiro-green)]">
-          {walletType === 'passkey' && <Fingerprint size={13} strokeWidth={1.8} />}
-          {walletType !== 'passkey' && (
-            <span
-              className="rounded-full bg-[var(--kiro-green)]"
-              style={{ width: 7, height: 7, boxShadow: '0 0 6px rgba(0,255,135,0.7)' }}
-              aria-hidden="true"
-            />
-          )}
+          <Fingerprint size={13} strokeWidth={1.8} />
           <span className="font-mono tracking-tight">{truncateKey(publicKey)}</span>
         </div>
         <button
@@ -124,6 +127,7 @@ export function WalletButton() {
   }
 
   const primaryLabel = hasPasskeyWallet ? 'Entrar' : 'Criar conta';
+  const disabledPrimary = !passkeySupported || isInsecureContext();
 
   return (
     <div ref={wrapRef} className="relative">
@@ -131,8 +135,8 @@ export function WalletButton() {
         <button
           type="button"
           onClick={handlePrimary}
-          disabled={!passkeySupported}
-          title={passkeySupported ? undefined : 'Passkeys não suportadas neste navegador'}
+          disabled={disabledPrimary}
+          title={disabledPrimary ? primarySubtitle({ passkeySupported, hasPasskeyWallet }) : undefined}
           className="inline-flex items-center gap-2 cursor-pointer text-[var(--fg-2)] hover:text-[var(--fg-1)] font-sans text-[13px] bg-transparent border-none disabled:opacity-50 disabled:cursor-not-allowed"
           style={{ padding: '6px 12px 6px 12px' }}
         >
@@ -142,7 +146,7 @@ export function WalletButton() {
         <button
           type="button"
           onClick={() => setMenuOpen((o) => !o)}
-          aria-label="Outras opções de carteira"
+          aria-label="Mais opções"
           aria-expanded={menuOpen}
           className="inline-flex items-center justify-center cursor-pointer text-[var(--fg-3)] hover:text-[var(--fg-1)] bg-transparent border-none border-l border-l-[var(--stroke-2)]"
           style={{ padding: '0 10px' }}
@@ -165,30 +169,17 @@ export function WalletButton() {
             backdropFilter: 'blur(16px) saturate(140%)',
             WebkitBackdropFilter: 'blur(16px) saturate(140%)',
             boxShadow: 'var(--shadow-3)',
-            width: 280,
+            width: 300,
             zIndex: 50,
           }}
         >
           <MenuItem
             icon={<Fingerprint size={16} strokeWidth={1.7} color="var(--kiro-green)" />}
             title={hasPasskeyWallet ? 'Entrar com Face ID' : 'Criar conta com Face ID'}
-            subtitle={
-              hasPasskeyWallet
-                ? 'Use a passkey deste dispositivo'
-                : 'Biometria, sem seedphrase'
-            }
+            subtitle={primarySubtitle({ passkeySupported, hasPasskeyWallet })}
             onClick={handlePrimary}
-            disabled={!passkeySupported}
+            disabled={disabledPrimary}
             primary
-          />
-
-          <div style={{ height: 1, background: 'var(--stroke-1)' }} />
-
-          <MenuItem
-            icon={<Wallet size={16} strokeWidth={1.7} color="var(--fg-2)" />}
-            title="Carteira Stellar existente"
-            subtitle="Freighter, Albedo, xBull, Lobstr"
-            onClick={handleKitConnect}
           />
 
           {hasPasskeyWallet && (
@@ -272,13 +263,13 @@ function MenuItem({
       <div className="flex flex-col min-w-0">
         <span
           className="font-sans text-[13.5px] font-medium"
-          style={{
-            color: danger ? 'var(--danger)' : 'var(--fg-1)',
-          }}
+          style={{ color: danger ? 'var(--danger)' : 'var(--fg-1)' }}
         >
           {title}
         </span>
-        <span className="font-sans text-[11.5px] text-[var(--fg-3)] mt-[1px]">{subtitle}</span>
+        <span className="font-sans text-[11.5px] text-[var(--fg-3)] mt-[1px] leading-snug">
+          {subtitle}
+        </span>
       </div>
     </button>
   );
@@ -286,20 +277,17 @@ function MenuItem({
 
 /**
  * Compact variant for the mobile header — icon-only that opens a bottom
- * sheet with the same options as the desktop popover (passkey + existing
- * Stellar wallet kit). Errors are surfaced inside the sheet so the user
- * isn't left wondering when something fails silently.
+ * sheet with the passkey actions. The sheet is rendered via `createPortal`
+ * to escape the header's `backdrop-filter` containing block (otherwise
+ * `position: fixed` anchors to the header's 64px box instead of the viewport).
  */
 export function WalletButtonMobile() {
   const {
     isConnected,
     isLoading,
-    walletType,
     hasPasskeyWallet,
     passkeySupported,
     connect,
-    createPasskeyAccount,
-    loginWithPasskey,
     disconnect,
     forgetPasskeyAccount,
   } = useWallet();
@@ -308,7 +296,6 @@ export function WalletButtonMobile() {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // ESC closes the sheet
   useEffect(() => {
     if (!sheetOpen) return;
     const onKey = (e: KeyboardEvent) => {
@@ -318,27 +305,17 @@ export function WalletButtonMobile() {
     return () => document.removeEventListener('keydown', onKey);
   }, [sheetOpen]);
 
-  async function handlePasskey() {
+  async function handlePrimary() {
     setErrorMsg(null);
     setSheetOpen(false);
     try {
-      if (hasPasskeyWallet) {
-        await loginWithPasskey();
-      } else {
-        await createPasskeyAccount(profile.name);
-      }
+      await connect(profile.name);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Erro ao autenticar.';
       setErrorMsg(msg);
       setSheetOpen(true);
       console.error('[WalletButtonMobile] passkey flow failed:', err);
     }
-  }
-
-  function handleKitConnect() {
-    setSheetOpen(false);
-    setErrorMsg(null);
-    connect();
   }
 
   function handleForget() {
@@ -361,7 +338,8 @@ export function WalletButtonMobile() {
     );
   }
 
-  const Icon = isConnected && walletType === 'passkey' ? Fingerprint : Wallet;
+  const Icon = isConnected ? Fingerprint : Wallet;
+  const disabledPrimary = !passkeySupported || isInsecureContext();
 
   return (
     <>
@@ -429,25 +407,10 @@ export function WalletButtonMobile() {
               <MenuItem
                 icon={<Fingerprint size={16} strokeWidth={1.7} color="var(--kiro-green)" />}
                 title={hasPasskeyWallet ? 'Entrar com Face ID' : 'Criar conta com Face ID'}
-                subtitle={
-                  passkeySupported
-                    ? hasPasskeyWallet
-                      ? 'Use a passkey deste dispositivo'
-                      : 'Biometria, sem seedphrase'
-                    : 'Não suportado neste navegador'
-                }
-                onClick={handlePasskey}
-                disabled={!passkeySupported}
+                subtitle={primarySubtitle({ passkeySupported, hasPasskeyWallet })}
+                onClick={handlePrimary}
+                disabled={disabledPrimary}
                 primary
-              />
-
-              <div style={{ height: 1, background: 'var(--stroke-1)' }} />
-
-              <MenuItem
-                icon={<Wallet size={16} strokeWidth={1.7} color="var(--fg-2)" />}
-                title="Carteira Stellar existente"
-                subtitle="Lobstr, Albedo, xBull (deeplink)"
-                onClick={handleKitConnect}
               />
 
               {hasPasskeyWallet && (
