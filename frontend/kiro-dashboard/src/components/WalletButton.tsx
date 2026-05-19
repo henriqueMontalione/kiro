@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   ChevronDown,
   Fingerprint,
@@ -6,6 +7,7 @@ import {
   LogOut,
   Trash2,
   Wallet,
+  X,
 } from 'lucide-react';
 import { useWallet } from '@/context/WalletContext';
 import { useUserProfile } from '@/context/UserProfileContext';
@@ -283,11 +285,10 @@ function MenuItem({
 }
 
 /**
- * Compact variant for the mobile header — icon-only.
- *
- * Mobile tap behavior is passkey-first because Freighter (the dominant
- * Stellar wallet) is a Chrome extension and doesn't exist on mobile. Users
- * who need Albedo/Lobstr deeplinks can switch to desktop.
+ * Compact variant for the mobile header — icon-only that opens a bottom
+ * sheet with the same options as the desktop popover (passkey + existing
+ * Stellar wallet kit). Errors are surfaced inside the sheet so the user
+ * isn't left wondering when something fails silently.
  */
 export function WalletButtonMobile() {
   const {
@@ -296,11 +297,61 @@ export function WalletButtonMobile() {
     walletType,
     hasPasskeyWallet,
     passkeySupported,
+    connect,
     createPasskeyAccount,
     loginWithPasskey,
     disconnect,
+    forgetPasskeyAccount,
   } = useWallet();
   const profile = useUserProfile();
+
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // ESC closes the sheet
+  useEffect(() => {
+    if (!sheetOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setSheetOpen(false);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [sheetOpen]);
+
+  async function handlePasskey() {
+    setErrorMsg(null);
+    setSheetOpen(false);
+    try {
+      if (hasPasskeyWallet) {
+        await loginWithPasskey();
+      } else {
+        await createPasskeyAccount(profile.name);
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Erro ao autenticar.';
+      setErrorMsg(msg);
+      setSheetOpen(true);
+      console.error('[WalletButtonMobile] passkey flow failed:', err);
+    }
+  }
+
+  function handleKitConnect() {
+    setSheetOpen(false);
+    setErrorMsg(null);
+    connect();
+  }
+
+  function handleForget() {
+    if (
+      !confirm(
+        'Esquecer esta conta passkey? Sem a sincronização do passkey você não conseguirá recuperar o acesso.',
+      )
+    ) {
+      return;
+    }
+    setSheetOpen(false);
+    forgetPasskeyAccount();
+  }
 
   if (isLoading) {
     return (
@@ -310,48 +361,126 @@ export function WalletButtonMobile() {
     );
   }
 
-  async function handleTap() {
-    if (isConnected) {
-      disconnect();
-      return;
-    }
-    if (!passkeySupported) return;
-    try {
-      if (hasPasskeyWallet) {
-        await loginWithPasskey();
-      } else {
-        await createPasskeyAccount(profile.name);
-      }
-    } catch (err) {
-      console.error('[WalletButtonMobile] passkey flow failed:', err);
-    }
-  }
-
   const Icon = isConnected && walletType === 'passkey' ? Fingerprint : Wallet;
 
   return (
-    <button
-      type="button"
-      onClick={handleTap}
-      disabled={!isConnected && !passkeySupported}
-      aria-label={isConnected ? 'Desconectar carteira' : 'Entrar com passkey'}
-      className="relative inline-flex items-center justify-center rounded-full bg-transparent border-none cursor-pointer transition-colors hover:bg-white/[0.04] disabled:opacity-40"
-      style={{ width: 44, height: 44, color: isConnected ? 'var(--kiro-green)' : 'var(--fg-2)' }}
-    >
-      <Icon size={22} strokeWidth={1.6} />
-      {isConnected && (
-        <span
-          className="absolute rounded-full bg-[var(--kiro-green)]"
-          style={{
-            top: 10,
-            right: 10,
-            width: 8,
-            height: 8,
-            boxShadow: '0 0 8px rgba(0,255,135,0.7)',
-          }}
-          aria-hidden="true"
-        />
+    <>
+      <button
+        type="button"
+        onClick={isConnected ? disconnect : () => setSheetOpen(true)}
+        aria-label={isConnected ? 'Desconectar carteira' : 'Conectar carteira'}
+        className="relative inline-flex items-center justify-center rounded-full bg-transparent border-none cursor-pointer transition-colors hover:bg-white/[0.04]"
+        style={{ width: 44, height: 44, color: isConnected ? 'var(--kiro-green)' : 'var(--fg-2)' }}
+      >
+        <Icon size={22} strokeWidth={1.6} />
+        {isConnected && (
+          <span
+            className="absolute rounded-full bg-[var(--kiro-green)]"
+            style={{
+              top: 10,
+              right: 10,
+              width: 8,
+              height: 8,
+              boxShadow: '0 0 8px rgba(0,255,135,0.7)',
+            }}
+            aria-hidden="true"
+          />
+        )}
+      </button>
+
+      {sheetOpen && createPortal(
+        <div
+          onClick={() => setSheetOpen(false)}
+          className="fixed inset-0 z-[100] flex items-end"
+          style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full border-t"
+            style={{
+              background: 'rgba(20, 22, 32, 0.97)',
+              backdropFilter: 'blur(24px) saturate(140%)',
+              WebkitBackdropFilter: 'blur(24px) saturate(140%)',
+              borderColor: 'var(--stroke-2)',
+              borderTopLeftRadius: 'var(--radius-xl)',
+              borderTopRightRadius: 'var(--radius-xl)',
+              padding: '18px 12px calc(24px + env(safe-area-inset-bottom))',
+              maxHeight: '80vh',
+              overflowY: 'auto',
+              boxShadow: 'var(--shadow-3)',
+            }}
+          >
+            <div className="flex items-center justify-between mb-3 px-2">
+              <h3 className="font-display text-[16px] font-semibold text-[var(--fg-1)] m-0">
+                Conectar
+              </h3>
+              <button
+                type="button"
+                onClick={() => setSheetOpen(false)}
+                aria-label="Fechar"
+                className="bg-transparent border-none text-[var(--fg-3)] cursor-pointer"
+                style={{ padding: 4 }}
+              >
+                <X size={20} strokeWidth={1.6} />
+              </button>
+            </div>
+
+            <div className="flex flex-col">
+              <MenuItem
+                icon={<Fingerprint size={16} strokeWidth={1.7} color="var(--kiro-green)" />}
+                title={hasPasskeyWallet ? 'Entrar com Face ID' : 'Criar conta com Face ID'}
+                subtitle={
+                  passkeySupported
+                    ? hasPasskeyWallet
+                      ? 'Use a passkey deste dispositivo'
+                      : 'Biometria, sem seedphrase'
+                    : 'Não suportado neste navegador'
+                }
+                onClick={handlePasskey}
+                disabled={!passkeySupported}
+                primary
+              />
+
+              <div style={{ height: 1, background: 'var(--stroke-1)' }} />
+
+              <MenuItem
+                icon={<Wallet size={16} strokeWidth={1.7} color="var(--fg-2)" />}
+                title="Carteira Stellar existente"
+                subtitle="Lobstr, Albedo, xBull (deeplink)"
+                onClick={handleKitConnect}
+              />
+
+              {hasPasskeyWallet && (
+                <>
+                  <div style={{ height: 1, background: 'var(--stroke-1)' }} />
+                  <MenuItem
+                    icon={<Trash2 size={15} strokeWidth={1.7} color="var(--danger)" />}
+                    title="Esquecer conta passkey"
+                    subtitle="Remove o blob local — passkey do OS continua"
+                    onClick={handleForget}
+                    danger
+                  />
+                </>
+              )}
+            </div>
+
+            {errorMsg && (
+              <div
+                className="mt-3 mx-2 rounded-[var(--radius-sm)] border font-sans text-[12px]"
+                style={{
+                  background: 'rgba(255,77,109,0.10)',
+                  borderColor: 'rgba(255,77,109,0.30)',
+                  color: '#FF8FA3',
+                  padding: '8px 12px',
+                }}
+              >
+                {errorMsg}
+              </div>
+            )}
+          </div>
+        </div>,
+        document.body,
       )}
-    </button>
+    </>
   );
 }

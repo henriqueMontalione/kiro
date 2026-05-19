@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { X, ChevronLeft, ChevronRight, Loader2, CheckCircle, AlertCircle, Copy, Check } from 'lucide-react';
+import { X, ChevronLeft, ChevronRight, Loader2, CheckCircle, AlertCircle, Copy, Check, ExternalLink, Info } from 'lucide-react';
 import { Button } from './Button';
 import { useWallet } from '@/context/WalletContext';
 import { formatBRL } from '@/lib/stellar';
@@ -255,6 +255,34 @@ export function ReceberPixModal({ open, onClose }: ReceberPixModalProps) {
     } catch { /* ignore */ }
   }
 
+  /**
+   * Re-open the KYC form when stuck on the "em análise" screen. Etherfuse
+   * returns `pending` both for genuinely-under-review customers AND for
+   * customers who started but never finished the form — we can't tell them
+   * apart, so we give the user a way back to the iframe either way.
+   */
+  async function resumeKyc() {
+    if (!publicKey || !customerIdRef.current) return;
+    setErrorMsg('');
+    setStep('loading');
+    try {
+      const result = await startOnboarding(
+        customerIdRef.current,
+        bankAccountIdRef.current,
+        publicKey,
+      );
+      customerIdRef.current = result.customerId;
+      bankAccountIdRef.current = result.bankAccountId;
+      localStorage.setItem(CUSTOMER_KEY, result.customerId);
+      localStorage.setItem(BANK_ACCOUNT_KEY, result.bankAccountId);
+      setKycUrl(result.kycUrl);
+      setStep('kyc');
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Erro ao reabrir cadastro');
+      setStep('error');
+    }
+  }
+
   function handleClose() {
     stopPolls();
     cancelRef.current = true;
@@ -315,10 +343,46 @@ export function ReceberPixModal({ open, onClose }: ReceberPixModalProps) {
         )}
 
         {step === 'kyc' && (
-          <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-3">
             <p className="text-[14px] text-[var(--fg-2)] leading-relaxed">
               Complete o cadastro abaixo para receber via PIX.
             </p>
+
+            {/* Testnet helper hint — see SacarPixModal for context. */}
+            <div
+              className="flex items-start gap-2 rounded-[var(--radius-sm)] border"
+              style={{
+                padding: '10px 12px',
+                background: 'rgba(255,181,71,0.06)',
+                borderColor: 'rgba(255,181,71,0.30)',
+              }}
+            >
+              <Info size={14} color="#FFB547" strokeWidth={1.7} className="mt-[2px] flex-shrink-0" />
+              <div className="text-[12px] leading-snug">
+                <p className="font-medium text-[var(--fg-1)] mb-[2px]">Modo Testnet</p>
+                <p className="text-[var(--fg-2)]">
+                  Os códigos de SMS/OTP não chegam no celular — eles aparecem no helper laranja do
+                  Etherfuse. Se o helper estiver cortado, abra em nova janela.
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => window.open(kycUrl, '_blank', 'noopener,noreferrer')}
+              className="inline-flex items-center justify-center gap-2 w-full font-display font-medium rounded-[var(--radius-md)] cursor-pointer transition-colors hover:bg-white/[0.10]"
+              style={{
+                padding: '10px 16px',
+                fontSize: 13,
+                background: 'rgba(255,255,255,0.06)',
+                color: 'var(--fg-1)',
+                border: '1px solid var(--stroke-3)',
+              }}
+            >
+              <ExternalLink size={14} strokeWidth={1.7} />
+              Abrir cadastro em nova janela
+            </button>
+
             <div
               className="rounded-[var(--radius-md)] overflow-hidden border border-[var(--stroke-3)]"
               style={{ height: 460 }}
