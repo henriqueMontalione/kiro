@@ -27,14 +27,27 @@ export interface EncryptedBlob {
   iv: Uint8Array;
 }
 
+// TypeScript 5.7+ tightened the typing on Web Crypto APIs to require
+// `Uint8Array<ArrayBuffer>` (not `Uint8Array<ArrayBufferLike>`). Our buffers
+// are runtime-safe but TS can't always narrow that, so we cast to
+// `BufferSource` at the call boundary. The runtime accepts both equally.
+
 export async function encryptBytes(key: CryptoKey, plaintext: Uint8Array): Promise<EncryptedBlob> {
   const iv = crypto.getRandomValues(new Uint8Array(12));
-  const cipherBuf = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, plaintext);
+  const cipherBuf = await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv: iv as BufferSource },
+    key,
+    plaintext as BufferSource,
+  );
   return { ciphertext: new Uint8Array(cipherBuf), iv };
 }
 
 export async function decryptBytes(key: CryptoKey, blob: EncryptedBlob): Promise<Uint8Array> {
-  const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: blob.iv }, key, blob.ciphertext);
+  const plain = await crypto.subtle.decrypt(
+    { name: 'AES-GCM', iv: blob.iv as BufferSource },
+    key,
+    blob.ciphertext as BufferSource,
+  );
   return new Uint8Array(plain);
 }
 

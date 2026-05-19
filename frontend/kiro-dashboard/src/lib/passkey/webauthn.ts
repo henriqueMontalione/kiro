@@ -15,23 +15,15 @@
  * - `attestation: 'none'` — we don't track the authenticator, user privacy
  */
 
-// PRF extension types — not yet in stock lib.dom typings (May 2026).
-interface PRFEval {
-  first: BufferSource;
-  second?: BufferSource;
-}
-interface PRFExtensionInput {
-  eval?: PRFEval;
-  evalByCredential?: Record<string, PRFEval>;
-}
+// PRF extension output type — kept standalone (NOT extending the stock
+// AuthenticationExtensionsClientOutputs) because lib.dom in TS 5.7+ has
+// a stricter PRF type that doesn't align with what `getClientExtensionResults`
+// returns at runtime. We cast on the boundary instead.
 interface PRFExtensionOutput {
   results?: { first?: ArrayBuffer; second?: ArrayBuffer };
   enabled?: boolean;
 }
-interface ExtensionInputs extends AuthenticationExtensionsClientInputs {
-  prf?: PRFExtensionInput;
-}
-interface ExtensionOutputs extends AuthenticationExtensionsClientOutputs {
+interface PRFClientExtensionResults {
   prf?: PRFExtensionOutput;
 }
 
@@ -73,12 +65,12 @@ export async function createPasskey(userName: string): Promise<PasskeyRegistrati
     throw new Error('Passkeys não são suportadas neste navegador.');
   }
 
-  const challenge = crypto.getRandomValues(new Uint8Array(32));
-  const userHandle = crypto.getRandomValues(new Uint8Array(16));
-
-  const extensions: ExtensionInputs = {
-    prf: { eval: { first: PRF_SALT } },
-  };
+  // Type assertion: TS 5.7+ requires `Uint8Array<ArrayBuffer>` specifically
+  // for BufferSource positions, but our number-length constructed Uint8Arrays
+  // are always backed by ArrayBuffer at runtime. Cast to silence the variance
+  // mismatch.
+  const challenge = crypto.getRandomValues(new Uint8Array(32)) as unknown as BufferSource;
+  const userHandle = crypto.getRandomValues(new Uint8Array(16)) as unknown as BufferSource;
 
   const cred = (await navigator.credentials.create({
     publicKey: {
@@ -95,13 +87,15 @@ export async function createPasskey(userName: string): Promise<PasskeyRegistrati
       },
       attestation: 'none',
       timeout: 60_000,
-      extensions: extensions as AuthenticationExtensionsClientInputs,
+      extensions: {
+        prf: { eval: { first: PRF_SALT as BufferSource } },
+      } as unknown as AuthenticationExtensionsClientInputs,
     },
   })) as PublicKeyCredential | null;
 
   if (!cred) throw new Error('Criação da passkey foi cancelada.');
 
-  const extResults = cred.getClientExtensionResults() as ExtensionOutputs;
+  const extResults = cred.getClientExtensionResults() as unknown as PRFClientExtensionResults;
   const prfOutput = extResults.prf?.results?.first;
 
   if (!prfOutput) {
@@ -126,26 +120,26 @@ export async function authenticatePasskey(credentialId: Uint8Array): Promise<Pas
     throw new Error('Passkeys não são suportadas neste navegador.');
   }
 
-  const challenge = crypto.getRandomValues(new Uint8Array(32));
-
-  const extensions: ExtensionInputs = {
-    prf: { eval: { first: PRF_SALT } },
-  };
+  const challenge = crypto.getRandomValues(new Uint8Array(32)) as unknown as BufferSource;
 
   const cred = (await navigator.credentials.get({
     publicKey: {
       challenge,
       rpId: getRpId(),
-      allowCredentials: [{ id: credentialId, type: 'public-key' }],
+      allowCredentials: [
+        { id: credentialId as unknown as BufferSource, type: 'public-key' },
+      ],
       userVerification: 'required',
       timeout: 60_000,
-      extensions: extensions as AuthenticationExtensionsClientInputs,
+      extensions: {
+        prf: { eval: { first: PRF_SALT as BufferSource } },
+      } as unknown as AuthenticationExtensionsClientInputs,
     },
   })) as PublicKeyCredential | null;
 
   if (!cred) throw new Error('Autenticação cancelada.');
 
-  const extResults = cred.getClientExtensionResults() as ExtensionOutputs;
+  const extResults = cred.getClientExtensionResults() as unknown as PRFClientExtensionResults;
   const prfOutput = extResults.prf?.results?.first;
 
   if (!prfOutput) {

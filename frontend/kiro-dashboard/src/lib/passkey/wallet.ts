@@ -163,7 +163,10 @@ export async function signXdrWithPasskey(xdr: string): Promise<string> {
       iv: base64ToBytes(stored.ivB64),
     });
 
-    keypair = Keypair.fromRawEd25519Seed(seed);
+    // stellar-sdk's type signature here says `Buffer` but the runtime
+    // accepts any Uint8Array (Buffer extends Uint8Array). Cast to silence
+    // the strict TS check without converting through a polyfilled Buffer.
+    keypair = Keypair.fromRawEd25519Seed(seed as unknown as Buffer);
     const tx = TransactionBuilder.fromXDR(xdr, NETWORK_PASSPHRASE);
     tx.sign(keypair);
     return tx.toXDR();
