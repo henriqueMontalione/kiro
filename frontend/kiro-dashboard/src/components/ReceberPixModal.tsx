@@ -336,7 +336,7 @@ export function ReceberPixModal({ open, onClose }: ReceberPixModalProps) {
             <p className="text-[14px] text-[var(--fg-2)] leading-relaxed">
               Conecte sua carteira Stellar para receber via PIX.
             </p>
-            <Button variant="primary" size="lg" onClick={connect} className="w-full justify-center">
+            <Button variant="primary" size="lg" onClick={() => connect()} className="w-full justify-center">
               Conectar carteira
             </Button>
           </div>
