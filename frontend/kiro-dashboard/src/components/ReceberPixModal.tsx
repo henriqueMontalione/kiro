@@ -402,14 +402,17 @@ export function ReceberPixModal({ open, onClose }: ReceberPixModalProps) {
         )}
 
         {step === 'kyc_review' && (
-          <div className="flex flex-col items-center gap-5 py-10 text-center">
+          <div className="flex flex-col items-center gap-5 py-8 text-center">
             <Loader2 size={36} strokeWidth={1.4} className="animate-spin" style={{ color: 'var(--kiro-green)' }} />
             <div>
               <p className="text-[15px] font-medium text-[var(--fg-1)] mb-1">Cadastro em análise</p>
               <p className="text-[13px] text-[var(--fg-3)] leading-relaxed">
-                Seu cadastro está sendo revisado. Aguarde a aprovação para continuar.
+                Aguarde a aprovação ou retome o formulário se você não finalizou.
               </p>
             </div>
+            <Button variant="secondary" onClick={resumeKyc}>
+              Reabrir cadastro
+            </Button>
           </div>
         )}
 
