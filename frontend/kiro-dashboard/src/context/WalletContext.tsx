@@ -1,9 +1,10 @@
 import {
   createContext,
-  useContext,
-  useState,
   useCallback,
+  useContext,
+  useEffect,
   useRef,
+  useState,
   type ReactNode,
 } from 'react';
 // Sub-path imports intentional: the main package entry (index.mjs) re-exports
@@ -18,6 +19,16 @@ import { LobstrModule } from '@creit.tech/stellar-wallets-kit/modules/lobstr.mod
 // Side-effect import: registers the <stellar-wallets-modal> custom element.
 import '@creit.tech/stellar-wallets-kit/components/modal/stellar-wallets-modal';
 import { fetchTesouroBalance, WALLET_NETWORK, NETWORK_PASSPHRASE } from '@/lib/stellar';
+import {
+  createPasskeyWallet,
+  forgetPasskeyWallet,
+  hasPasskeyWallet as readHasPasskeyWallet,
+  isPasskeySupported,
+  loginWithPasskey as authPasskey,
+  signXdrWithPasskey,
+} from '@/lib/passkey/wallet';
+
+export type WalletType = 'kit' | 'passkey' | null;
 
 interface WalletState {
   isConnected: boolean;
@@ -25,9 +36,23 @@ interface WalletState {
   /** Raw TESOURO balance from Horizon (e.g. "1000.0000000"), or null when not connected / issuer unconfigured. */
   balance: string | null;
   isLoading: boolean;
+  /** Which backend signed in — drives `signTransaction` routing. */
+  walletType: WalletType;
+  /** True when a passkey-protected wallet blob exists in localStorage (regardless of session). */
+  hasPasskeyWallet: boolean;
+  /** True when the browser exposes the WebAuthn + PRF surface we need. */
+  passkeySupported: boolean;
+  /** Opens the stellar-wallets-kit modal (Freighter, Albedo, xBull, Lobstr). */
   connect: () => void;
+  /** Create a brand-new passkey-protected Stellar account on this device. */
+  createPasskeyAccount: (userName?: string) => Promise<void>;
+  /** Authenticate with the stored passkey to start a session. */
+  loginWithPasskey: () => Promise<void>;
+  /** Ends the current session. Does NOT remove the stored passkey blob — use `forgetPasskeyAccount` for that. */
   disconnect: () => void;
-  /** Signs an XDR transaction envelope with the connected wallet. Returns the signed XDR. */
+  /** Permanently delete the local passkey blob (the OS passkey itself stays). */
+  forgetPasskeyAccount: () => void;
+  /** Signs an XDR transaction envelope with whichever wallet is active. Returns signed XDR. */
   signTransaction: (xdr: string) => Promise<string>;
   /** Re-fetches the TESOURO balance from Horizon. No-op if not connected. */
   refreshBalance: () => Promise<void>;
@@ -54,9 +79,26 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [publicKey, setPublicKey] = useState<string | null>(null);
   const [balance, setBalance] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [walletType, setWalletType] = useState<WalletType>(null);
+  const [hasPasskeyWallet, setHasPasskeyWallet] = useState<boolean>(false);
+  const [passkeySupported, setPasskeySupported] = useState<boolean>(false);
 
   // Persisted across connect → signTransaction calls.
   const kitRef = useRef<StellarWalletsKit | null>(null);
+
+  useEffect(() => {
+    setHasPasskeyWallet(readHasPasskeyWallet());
+    setPasskeySupported(isPasskeySupported());
+  }, []);
+
+  const loadBalance = useCallback(async (address: string) => {
+    try {
+      const bal = await fetchTesouroBalance(address);
+      setBalance(bal);
+    } catch (err) {
+      console.error('[Wallet] Failed to fetch balance:', err);
+    }
+  }, []);
 
   const connect = useCallback(() => {
     // The kit tracks modal state internally and the custom element persists in
@@ -85,32 +127,78 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         // the background so the dashboard (and downstream cards like
         // TransactionsCard) can start their own queries in parallel.
         setPublicKey(address);
+        setWalletType('kit');
         setIsLoading(false);
 
-        try {
-          const bal = await fetchTesouroBalance(address);
-          setBalance(bal);
-        } catch (err) {
-          console.error('[Wallet] Failed to fetch balance:', err);
-        }
+        loadBalance(address);
       },
     });
-  }, []);
+  }, [loadBalance]);
+
+  const createPasskeyAccount = useCallback(
+    async (userName = 'Lojista Kiro') => {
+      setIsLoading(true);
+      try {
+        const address = await createPasskeyWallet(userName);
+        setPublicKey(address);
+        setWalletType('passkey');
+        setHasPasskeyWallet(true);
+        // friendbot funding is best-effort but usually instant on Testnet
+        await loadBalance(address);
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [loadBalance],
+  );
+
+  const loginWithPasskey = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const address = await authPasskey();
+      setPublicKey(address);
+      setWalletType('passkey');
+      await loadBalance(address);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [loadBalance]);
 
   const disconnect = useCallback(() => {
     kitRef.current = null;
     setPublicKey(null);
     setBalance(null);
+    setWalletType(null);
+    // Note: passkey blob remains in localStorage so the user can return via
+    // "Entrar com Face ID" without re-creating. Call `forgetPasskeyAccount`
+    // explicitly to wipe it.
   }, []);
 
-  const signTransaction = useCallback(async (xdr: string): Promise<string> => {
-    const kit = kitRef.current;
-    if (!kit) throw new Error('Carteira não conectada');
-    const { signedTxXdr } = await kit.signTransaction(xdr, {
-      networkPassphrase: NETWORK_PASSPHRASE,
-    });
-    return signedTxXdr;
-  }, []);
+  const forgetPasskeyAccount = useCallback(() => {
+    forgetPasskeyWallet();
+    setHasPasskeyWallet(false);
+    if (walletType === 'passkey') {
+      setPublicKey(null);
+      setBalance(null);
+      setWalletType(null);
+    }
+  }, [walletType]);
+
+  const signTransaction = useCallback(
+    async (xdr: string): Promise<string> => {
+      if (walletType === 'passkey') {
+        return signXdrWithPasskey(xdr);
+      }
+
+      const kit = kitRef.current;
+      if (!kit) throw new Error('Carteira não conectada');
+      const { signedTxXdr } = await kit.signTransaction(xdr, {
+        networkPassphrase: NETWORK_PASSPHRASE,
+      });
+      return signedTxXdr;
+    },
+    [walletType],
+  );
 
   const refreshBalance = useCallback(async () => {
     if (!publicKey) return;
@@ -120,7 +208,22 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   return (
     <WalletContext.Provider
-      value={{ isConnected: !!publicKey, publicKey, balance, isLoading, connect, disconnect, signTransaction, refreshBalance }}
+      value={{
+        isConnected: !!publicKey,
+        publicKey,
+        balance,
+        isLoading,
+        walletType,
+        hasPasskeyWallet,
+        passkeySupported,
+        connect,
+        createPasskeyAccount,
+        loginWithPasskey,
+        disconnect,
+        forgetPasskeyAccount,
+        signTransaction,
+        refreshBalance,
+      }}
     >
       {children}
     </WalletContext.Provider>
