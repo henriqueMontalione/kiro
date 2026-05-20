@@ -97,7 +97,11 @@ export function ReceberPixModal({ open, onClose }: ReceberPixModalProps) {
       orderPollRef.current = setInterval(async () => {
         try {
           const result = await getOnRampOrder(orderId);
-          if (result.status === 'completed' || result.status === 'funded') {
+          // Only `completed` means the crypto is delivered and the claim XDR
+          // (if any) is ready. `funded` is the intermediate "processing" state
+          // — fiat received but claimable balance not yet created. Keep
+          // polling through `funded` until completion.
+          if (result.status === 'completed') {
             stopPolls();
             // First-time Stellar wallets without a TESOURO trustline receive
             // the tokens via a claimable balance — Etherfuse hands us an XDR
