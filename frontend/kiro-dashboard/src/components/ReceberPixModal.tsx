@@ -10,9 +10,12 @@ import {
   getOnRampQuote,
   createOnRampOrder,
   getOnRampOrder,
+  sandboxApprove,
   type OnRampQuoteResult,
   type OnRampOrderResult,
 } from '@/lib/anchors/etherfuse/client';
+
+const SANDBOX_ENABLED = import.meta.env.VITE_ETHERFUSE_SANDBOX === 'true';
 
 type Step =
   | 'loading'
@@ -46,6 +49,7 @@ export function ReceberPixModal({ open, onClose }: ReceberPixModalProps) {
   const [order, setOrder] = useState<OnRampOrderResult | null>(null);
   const [errorMsg, setErrorMsg] = useState('');
   const [copied, setCopied] = useState(false);
+  const [isSandboxApproving, setIsSandboxApproving] = useState(false);
 
   const kycPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const orderPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -223,12 +227,31 @@ export function ReceberPixModal({ open, onClose }: ReceberPixModalProps) {
 
     setStep('loading');
     try {
-      const q = await getOnRampQuote(customerIdRef.current, String(num));
+      const q = await tryQuoteWithSandboxRecovery(num);
       setQuote(q);
       setStep('confirm');
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : 'Erro ao obter cotação');
       setStep('error');
+    }
+  }
+
+  /**
+   * Wraps `getOnRampQuote` with one retry path for the sandbox bypass: if
+   * Etherfuse rejects the quote because agreements were not accepted (which
+   * happens when KYC was approved programmatically, skipping the hosted UI's
+   * terms-and-conditions screen), call `sandboxApprove` to retroactively
+   * accept them and try the quote again. Only runs in sandbox builds.
+   */
+  async function tryQuoteWithSandboxRecovery(num: number) {
+    try {
+      return await getOnRampQuote(customerIdRef.current, String(num));
+    } catch (err) {
+      const msg = err instanceof Error ? err.message.toLowerCase() : '';
+      const isAgreementsError = msg.includes('terms and conditions');
+      if (!SANDBOX_ENABLED || !isAgreementsError || !publicKey) throw err;
+      await sandboxApprove(customerIdRef.current, publicKey, bankAccountIdRef.current);
+      return await getOnRampQuote(customerIdRef.current, String(num));
     }
   }
 
@@ -253,6 +276,47 @@ export function ReceberPixModal({ open, onClose }: ReceberPixModalProps) {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch { /* ignore */ }
+  }
+
+  /**
+   * Sandbox-only: posts a dummy ID document to Etherfuse's documents-upload
+   * endpoint, which their sandbox auto-approves immediately (per
+   * docs.etherfuse.com/api-reference/kyc/upload-kyc-documents). Skips the
+   * human-review queue that sandbox uses for hosted-UI submissions.
+   * Backend gate ensures this no-ops in production.
+   */
+  async function handleSandboxApprove() {
+    if (!publicKey || !customerIdRef.current) return;
+    setIsSandboxApproving(true);
+    setErrorMsg('');
+    try {
+      // Trust the upload response — getKycStatus has propagation lag and
+      // would still report "proposed" right after this call returns.
+      const status = await sandboxApprove(
+        customerIdRef.current,
+        publicKey,
+        bankAccountIdRef.current,
+      );
+      if (status === 'approved') {
+        stopPolls();
+        try {
+          const accounts = await getBankAccounts(customerIdRef.current);
+          if (accounts.length > 0) {
+            bankAccountIdRef.current = accounts[0].id;
+            localStorage.setItem(BANK_ACCOUNT_KEY, accounts[0].id);
+          }
+        } catch { /* keep current ID */ }
+        setStep('amount');
+      } else if (status === 'rejected') {
+        stopPolls();
+        setStep('kyc_rejected');
+      }
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Erro no sandbox approve');
+      setStep('error');
+    } finally {
+      setIsSandboxApproving(false);
+    }
   }
 
   /**
@@ -413,6 +477,22 @@ export function ReceberPixModal({ open, onClose }: ReceberPixModalProps) {
             <Button variant="secondary" onClick={resumeKyc}>
               Reabrir cadastro
             </Button>
+            {SANDBOX_ENABLED && (
+              <button
+                type="button"
+                onClick={handleSandboxApprove}
+                disabled={isSandboxApproving}
+                className="text-[12px] underline-offset-2 hover:underline disabled:opacity-50 cursor-pointer"
+                style={{
+                  color: 'var(--fg-3)',
+                  background: 'transparent',
+                  border: 'none',
+                  padding: 0,
+                }}
+              >
+                {isSandboxApproving ? 'Aprovando...' : 'Pular aprovação (sandbox)'}
+              </button>
+            )}
           </div>
         )}
 

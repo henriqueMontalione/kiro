@@ -61,6 +61,37 @@ export async function startOnboarding(
   });
 }
 
+/**
+ * Sandbox-only escape hatch: in one round trip, this auto-approves KYC
+ * (placeholder document upload) AND accepts both required agreements
+ * (terms-and-conditions + customer-agreement). The hosted UI normally
+ * walks the user through both, so the programmatic bypass must replay
+ * the agreements step too or quotes fail with "Terms and conditions
+ * have not been completed". Server-side is gated on `ETHERFUSE_BASE_URL`
+ * containing "sand", so this no-ops in prod.
+ *
+ * Returns the canonical KYC status from the upload response — important
+ * because the regular `GET /kyc/{publicKey}` endpoint has a propagation
+ * delay and may still report "proposed" right after the upload succeeds.
+ * Trust this return value, not a follow-up `getKycStatus` call.
+ */
+export async function sandboxApprove(
+  customerId: string,
+  publicKey: string,
+  bankAccountId: string,
+): Promise<KycStatus> {
+  const res = await apiFetch<{ ok: boolean; data: { status?: string } }>(
+    'POST',
+    '/ef-sandbox-approve',
+    { customerId, publicKey, bankAccountId },
+  );
+  const raw = res.data?.status;
+  if (raw === 'approved' || raw === 'approved_chain_deploying') return 'approved';
+  if (raw === 'rejected') return 'rejected';
+  if (raw === 'proposed') return 'pending';
+  return 'not_started';
+}
+
 /** Returns the canonical KYC status for a customer+wallet pair. */
 export async function getKycStatus(
   customerId: string,

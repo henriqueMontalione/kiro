@@ -60,6 +60,24 @@ function sendJson(res: ServerResponse, data: unknown, status = 200) {
   res.end(JSON.stringify(data));
 }
 
+// Identity payload for the sandbox bypass — matches Etherfuse's documented
+// schema for POST /ramp/customer/{id}/kyc. `phoneNumber` is included as a
+// guess to satisfy the downstream agreements endpoints (the doc's Mexican
+// example omits it). Sandbox accepts any plausible data.
+const SANDBOX_KYC_IDENTITY = {
+  name: { givenName: 'Sandbox', familyName: 'Tester' },
+  dateOfBirth: '1990-01-15',
+  phoneNumber: '+5511999999999',
+  address: {
+    street: 'Av. Paulista 1000',
+    city: 'Sao Paulo',
+    region: 'SP',
+    postalCode: '01310100',
+    country: 'BR',
+  },
+  idNumbers: [{ value: '00000000191', type: 'CPF' }],
+};
+
 /**
  * Etherfuse off-ramp proxy. Runs as Vite middleware so the API key stays
  * server-side and `npm run dev` boots both UI and proxy in one terminal.
@@ -221,6 +239,71 @@ function etherfuseApi(env: ApiEnv): Plugin {
               depositPixCode: o.depositPixCode ?? '',
               beneficiary: o.beneficiary ?? '',
             });
+          }
+
+          // POST /api/ef-sandbox-approve — fast-forwards KYC AND accepts both
+          // required agreements in one shot. Order matters: docs upload runs
+          // FIRST because calling /ramp/onboarding-url for an existing customer
+          // appears to disrupt the next docs-upload auto-approval. After docs
+          // settle, we refresh the presigned URL (needed as auth for agreements)
+          // and post the two agreement acceptances. Each step is best-effort —
+          // re-calling for an already-approved/already-accepted customer just
+          // gets caught and we move on. Gated server-side on the base URL.
+          if (parsed.pathname === '/api/ef-sandbox-approve' && method === 'POST') {
+            if (!env.baseUrl.includes('sand')) {
+              return sendJson(res, { error: 'Sandbox approve indisponível fora do ambiente sandbox' }, 403);
+            }
+            const { customerId, publicKey, bankAccountId } = JSON.parse(await readBody(req)) as {
+              customerId: string; publicKey: string; bankAccountId: string;
+            };
+
+            // 1. Submit programmatic KYC with PII — sandbox auto-approves on
+            //    success AND populates the fields (esp. phoneNumber) that the
+            //    customer-agreement endpoint later requires. Using /kyc rather
+            //    than /kyc/documents because the latter doesn't set PII and
+            //    runs into "Too many pending documents" on retries.
+            let kycStatus: string | null = null;
+            try {
+              // Docs claim no `id` field exists, but the live deserializer
+              // demands one — column count from the error matches the inner
+              // identity close, so `id` is required INSIDE identity.
+              // Using customerId since that's the only UUID we have handy.
+              const kycData = await efetch(env, 'POST', `/ramp/customer/${customerId}/kyc`, {
+                pubkey: publicKey,
+                identity: { id: customerId, ...SANDBOX_KYC_IDENTITY },
+              }) as { status?: string };
+              kycStatus = kycData.status ?? null;
+            } catch (err) {
+              console.log('[ef-sandbox-approve] /kyc failed (likely already approved):', (err as Error).message);
+              try {
+                const statusData = await efetch(env, 'GET', `/ramp/customer/${customerId}/kyc/${publicKey}`) as { status?: string };
+                kycStatus = statusData.status ?? null;
+              } catch { /* keep null */ }
+            }
+
+            // 2. Get a presigned URL — required to auth the agreements endpoints.
+            let presignedUrl: string | null = null;
+            try {
+              const onboardData = await efetch(env, 'POST', '/ramp/onboarding-url', {
+                customerId, bankAccountId, publicKey, blockchain: 'stellar',
+              }) as { presigned_url?: string };
+              presignedUrl = onboardData.presigned_url ?? null;
+            } catch (err) {
+              console.log('[ef-sandbox-approve] onboarding-url failed:', (err as Error).message);
+            }
+
+            // 3. Accept both required agreements.
+            if (presignedUrl) {
+              for (const path of ['/ramp/agreements/terms-and-conditions', '/ramp/agreements/customer-agreement']) {
+                try {
+                  await efetch(env, 'POST', path, { presignedUrl });
+                } catch (err) {
+                  console.log(`[ef-sandbox-approve] ${path} failed (likely already accepted):`, (err as Error).message);
+                }
+              }
+            }
+
+            return sendJson(res, { ok: true, data: { status: kycStatus } });
           }
 
           // GET /api/ef-onramp-order?orderId=... — poll for completion.
