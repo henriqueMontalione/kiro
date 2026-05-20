@@ -202,14 +202,31 @@ export interface OnRampPollResult {
   confirmedTxSignature: string | null;
   amountInTokens: string | null;
   amountInFiat: string | null;
+  /**
+   * Stellar-only. Present when the destination wallet lacked a TESOURO
+   * trustline at order time: Etherfuse delivers via a claimable balance and
+   * gives us back an unsigned XDR that does ChangeTrust + ClaimClaimableBalance
+   * in one transaction. The user must sign this with their wallet and submit
+   * to Horizon to actually receive the tokens.
+   */
+  stellarClaimTransaction: string | null;
+  stellarClaimableBalanceId: string | null;
 }
 
-/** Gets a BRL→TESOURO on-ramp quote for the given BRL amount. */
+/**
+ * Gets a BRL→TESOURO on-ramp quote. `walletAddress` is optional but strongly
+ * recommended — when provided, Etherfuse detects missing trustlines/accounts
+ * and folds the one-time setup cost into the fee, returning a claim XDR on
+ * the resulting order rather than rejecting it.
+ */
 export async function getOnRampQuote(
   customerId: string,
   sourceAmount: string,
+  walletAddress?: string,
 ): Promise<OnRampQuoteResult> {
-  return apiFetch<OnRampQuoteResult>('POST', '/ef-onramp-quote', { customerId, sourceAmount });
+  return apiFetch<OnRampQuoteResult>('POST', '/ef-onramp-quote', {
+    customerId, sourceAmount, walletAddress,
+  });
 }
 
 /** Creates an on-ramp order. Returns the PIX deposit details. */

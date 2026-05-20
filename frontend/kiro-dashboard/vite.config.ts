@@ -60,14 +60,11 @@ function sendJson(res: ServerResponse, data: unknown, status = 200) {
   res.end(JSON.stringify(data));
 }
 
-// Identity payload for the sandbox bypass — matches Etherfuse's documented
-// schema for POST /ramp/customer/{id}/kyc. `phoneNumber` is included as a
-// guess to satisfy the downstream agreements endpoints (the doc's Mexican
-// example omits it). Sandbox accepts any plausible data.
+// Identity payload for the sandbox bypass /kyc submission. Matches the
+// documented schema for POST /ramp/customer/{id}/kyc.
 const SANDBOX_KYC_IDENTITY = {
   name: { givenName: 'Sandbox', familyName: 'Tester' },
   dateOfBirth: '1990-01-15',
-  phoneNumber: '+5511999999999',
   address: {
     street: 'Av. Paulista 1000',
     city: 'Sao Paulo',
@@ -76,6 +73,26 @@ const SANDBOX_KYC_IDENTITY = {
     country: 'BR',
   },
   idNumbers: [{ value: '00000000191', type: 'CPF' }],
+};
+
+// customerInfo payload for the customer-agreement acceptance. The openapi
+// marks it "optional" but the live API rejects each missing field one at a
+// time ("Phone not provided" → "Email not provided" → "Occupation not
+// provided" → ...). Schema is `ProofOfIdentityUserInfo` from openapi.yaml,
+// so we send the full shape upfront to short-circuit the iteration.
+const SANDBOX_CUSTOMER_INFO = {
+  email: 'sandbox@kiro.test',
+  phoneNumber: '+5511999999999',
+  dateOfBirth: '1990-01-15',
+  // Both `name` and `address` are flat strings in the live API's
+  // customerInfo struct, even though openapi.yaml's ProofOfIdentityUserInfo
+  // types them as objects. Sending the object form gets rejected with
+  // "invalid type: map, expected a string".
+  name: 'Sandbox Tester',
+  address: 'Av. Paulista 1000, Sao Paulo, SP 01310-100, BR',
+  idNumbers: [{ value: '00000000191', type: 'CPF' }],
+  occupation: 'Software Developer',
+  identificationType: 'CPF',
 };
 
 /**
@@ -203,15 +220,23 @@ function etherfuseApi(env: ApiEnv): Plugin {
             });
           }
 
-          // POST /api/ef-onramp-quote → POST /ramp/quote (BRL → TESOURO)
+          // POST /api/ef-onramp-quote → POST /ramp/quote (BRL → TESOURO).
+          // Pass `walletAddress` when known so Etherfuse can detect missing
+          // trustlines/accounts and include the one-time setup cost in the
+          // fee — without it, the order endpoint rejects new wallets with
+          // "trustline not found".
           if (parsed.pathname === '/api/ef-onramp-quote' && method === 'POST') {
-            const { customerId, sourceAmount } = JSON.parse(await readBody(req));
+            const { customerId, sourceAmount, walletAddress } = JSON.parse(await readBody(req)) as {
+              customerId: string; sourceAmount: string; walletAddress?: string;
+            };
             const quoteId = randomUUID();
-            const data = await efetch(env, 'POST', '/ramp/quote', {
+            const body: Record<string, unknown> = {
               quoteId, customerId, blockchain: 'stellar',
               quoteAssets: { type: 'onramp', sourceAsset: 'BRL', targetAsset: env.tesouroAsset },
               sourceAmount,
-            }) as Record<string, string | null>;
+            };
+            if (walletAddress) body.walletAddress = walletAddress;
+            const data = await efetch(env, 'POST', '/ramp/quote', body) as Record<string, string | null>;
             return sendJson(res, {
               quoteId: data.quoteId,
               sourceAmount: data.sourceAmount,
@@ -281,25 +306,41 @@ function etherfuseApi(env: ApiEnv): Plugin {
               } catch { /* keep null */ }
             }
 
-            // 2. Get a presigned URL — required to auth the agreements endpoints.
-            let presignedUrl: string | null = null;
-            try {
-              const onboardData = await efetch(env, 'POST', '/ramp/onboarding-url', {
-                customerId, bankAccountId, publicKey, blockchain: 'stellar',
-              }) as { presigned_url?: string };
-              presignedUrl = onboardData.presigned_url ?? null;
-            } catch (err) {
-              console.log('[ef-sandbox-approve] onboarding-url failed:', (err as Error).message);
-            }
+            // 2. (Removed — the agreement loop below fetches a fresh URL per call.)
 
-            // 3. Accept both required agreements.
-            if (presignedUrl) {
-              for (const path of ['/ramp/agreements/terms-and-conditions', '/ramp/agreements/customer-agreement']) {
-                try {
-                  await efetch(env, 'POST', path, { presignedUrl });
-                } catch (err) {
-                  console.log(`[ef-sandbox-approve] ${path} failed (likely already accepted):`, (err as Error).message);
-                }
+            // 3. Accept all THREE required agreements. Fetch a FRESH presigned
+            //    URL before each call in case the token is single-use, and
+            //    log the response body so we can see whether the API is
+            //    returning {success: false} on 200 (which our efetch wouldn't
+            //    treat as an error).
+            const freshUrl = async (): Promise<string | null> => {
+              try {
+                const data = await efetch(env, 'POST', '/ramp/onboarding-url', {
+                  customerId, bankAccountId, publicKey, blockchain: 'stellar',
+                }) as { presigned_url?: string };
+                return data.presigned_url ?? null;
+              } catch (err) {
+                console.log('[ef-sandbox-approve] freshUrl failed:', (err as Error).message);
+                return null;
+              }
+            };
+
+            const agreementCalls: Array<[string, (url: string) => Record<string, unknown>]> = [
+              ['/ramp/agreements/electronic-signature', (url) => ({ presignedUrl: url })],
+              ['/ramp/agreements/terms-and-conditions', (url) => ({ presignedUrl: url })],
+              ['/ramp/agreements/customer-agreement', (url) => ({
+                presignedUrl: url,
+                customerInfo: SANDBOX_CUSTOMER_INFO,
+              })],
+            ];
+            for (const [path, buildBody] of agreementCalls) {
+              const url = await freshUrl();
+              if (!url) continue;
+              try {
+                const result = await efetch(env, 'POST', path, buildBody(url));
+                console.log(`[ef-sandbox-approve] ${path} →`, JSON.stringify(result));
+              } catch (err) {
+                console.log(`[ef-sandbox-approve] ${path} failed:`, (err as Error).message);
               }
             }
 
@@ -316,6 +357,11 @@ function etherfuseApi(env: ApiEnv): Plugin {
               confirmedTxSignature: data.confirmedTxSignature ?? null,
               amountInTokens: data.amountInTokens ?? null,
               amountInFiat: data.amountInFiat ?? null,
+              // Stellar-only: present when the wallet lacked a trustline and
+              // Etherfuse delivered via a claimable balance. The client must
+              // sign and submit this XDR to add the trustline + claim tokens.
+              stellarClaimTransaction: data.stellarClaimTransaction ?? null,
+              stellarClaimableBalanceId: data.stellarClaimableBalanceId ?? null,
             });
           }
 

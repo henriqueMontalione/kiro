@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { X, ChevronLeft, ChevronRight, Loader2, CheckCircle, AlertCircle, Copy, Check, ExternalLink, Info } from 'lucide-react';
 import { Button } from './Button';
 import { useWallet } from '@/context/WalletContext';
-import { formatBRL } from '@/lib/stellar';
+import { formatBRL, submitXdr } from '@/lib/stellar';
 import {
   startOnboarding,
   getKycStatus,
@@ -26,6 +26,7 @@ type Step =
   | 'amount'
   | 'confirm'
   | 'pix'
+  | 'claiming'
   | 'done'
   | 'error';
 
@@ -40,7 +41,7 @@ interface ReceberPixModalProps {
 }
 
 export function ReceberPixModal({ open, onClose }: ReceberPixModalProps) {
-  const { isConnected, publicKey, connect, refreshBalance } = useWallet();
+  const { isConnected, publicKey, connect, signTransaction, refreshBalance } = useWallet();
 
   const [step, setStep] = useState<Step>('loading');
   const [kycUrl, setKycUrl] = useState('');
@@ -50,6 +51,7 @@ export function ReceberPixModal({ open, onClose }: ReceberPixModalProps) {
   const [errorMsg, setErrorMsg] = useState('');
   const [copied, setCopied] = useState(false);
   const [isSandboxApproving, setIsSandboxApproving] = useState(false);
+  const [claimingMsg, setClaimingMsg] = useState('');
 
   const kycPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const orderPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -96,6 +98,25 @@ export function ReceberPixModal({ open, onClose }: ReceberPixModalProps) {
           const result = await getOnRampOrder(orderId);
           if (result.status === 'completed' || result.status === 'funded') {
             stopPolls();
+            // First-time Stellar wallets without a TESOURO trustline receive
+            // the tokens via a claimable balance — Etherfuse hands us an XDR
+            // that does ChangeTrust + ClaimClaimableBalance in one tx. We
+            // sign it with the passkey and submit to Horizon. For wallets
+            // that already have the trustline, this field is null and we
+            // skip straight to done.
+            if (result.stellarClaimTransaction) {
+              setStep('claiming');
+              try {
+                setClaimingMsg('Aguardando assinatura na carteira...');
+                const signedXdr = await signTransaction(result.stellarClaimTransaction);
+                setClaimingMsg('Enviando para Stellar...');
+                await submitXdr(signedXdr);
+              } catch (err) {
+                setErrorMsg(err instanceof Error ? err.message : 'Erro ao reivindicar TESOURO');
+                setStep('error');
+                return;
+              }
+            }
             refreshBalance().catch(() => { /* silent */ });
             setStep('done');
           } else if (result.status === 'failed' || result.status === 'canceled') {
@@ -106,7 +127,7 @@ export function ReceberPixModal({ open, onClose }: ReceberPixModalProps) {
         } catch { /* transient */ }
       }, 5000);
     },
-    [stopPolls, refreshBalance],
+    [stopPolls, refreshBalance, signTransaction],
   );
 
   const startFlow = useCallback(
@@ -245,13 +266,13 @@ export function ReceberPixModal({ open, onClose }: ReceberPixModalProps) {
    */
   async function tryQuoteWithSandboxRecovery(num: number) {
     try {
-      return await getOnRampQuote(customerIdRef.current, String(num));
+      return await getOnRampQuote(customerIdRef.current, String(num), publicKey ?? undefined);
     } catch (err) {
       const msg = err instanceof Error ? err.message.toLowerCase() : '';
       const isAgreementsError = msg.includes('terms and conditions');
       if (!SANDBOX_ENABLED || !isAgreementsError || !publicKey) throw err;
       await sandboxApprove(customerIdRef.current, publicKey, bankAccountIdRef.current);
-      return await getOnRampQuote(customerIdRef.current, String(num));
+      return await getOnRampQuote(customerIdRef.current, String(num), publicKey);
     }
   }
 
@@ -653,6 +674,17 @@ export function ReceberPixModal({ open, onClose }: ReceberPixModalProps) {
               <Loader2 size={13} strokeWidth={1.5} className="animate-spin" />
               Aguardando pagamento via PIX...
             </div>
+          </div>
+        )}
+
+        {step === 'claiming' && (
+          <div className="flex flex-col items-center gap-4 py-10">
+            <Loader2 size={32} strokeWidth={1.5} className="animate-spin" style={{ color: 'var(--kiro-green)' }} />
+            <span className="text-[14px] text-[var(--fg-2)]">{claimingMsg}</span>
+            <p className="text-[12px] text-[var(--fg-3)] text-center max-w-[320px] leading-relaxed">
+              Sua carteira ainda não tem trustline pra TESOURO. Estamos criando
+              o trustline e reivindicando os tokens em uma única transação.
+            </p>
           </div>
         )}
 

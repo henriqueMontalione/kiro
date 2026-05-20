@@ -58,12 +58,12 @@ function json(data: unknown, status = 200): Response {
   });
 }
 
-// Identity payload for the sandbox bypass — matches Etherfuse's documented
-// schema. See vite.config.ts for the long comment.
+// Identity payload for the /kyc submission and customerInfo for the
+// customer-agreement acceptance. See vite.config.ts for the long comment
+// on why customerInfo needs the full ProofOfIdentityUserInfo shape.
 const SANDBOX_KYC_IDENTITY = {
   name: { givenName: 'Sandbox', familyName: 'Tester' },
   dateOfBirth: '1990-01-15',
-  phoneNumber: '+5511999999999',
   address: {
     street: 'Av. Paulista 1000',
     city: 'Sao Paulo',
@@ -72,6 +72,18 @@ const SANDBOX_KYC_IDENTITY = {
     country: 'BR',
   },
   idNumbers: [{ value: '00000000191', type: 'CPF' }],
+};
+
+const SANDBOX_CUSTOMER_INFO = {
+  email: 'sandbox@kiro.test',
+  phoneNumber: '+5511999999999',
+  dateOfBirth: '1990-01-15',
+  // Both `name` and `address` are flat strings here. See vite.config.ts.
+  name: 'Sandbox Tester',
+  address: 'Av. Paulista 1000, Sao Paulo, SP 01310-100, BR',
+  idNumbers: [{ value: '00000000191', type: 'CPF' }],
+  occupation: 'Software Developer',
+  identificationType: 'CPF',
 };
 
 export default async (req: Request): Promise<Response> => {
@@ -180,15 +192,20 @@ export default async (req: Request): Promise<Response> => {
       });
     }
 
-    // POST /api/ef-onramp-quote — on-ramp (BRL → TESOURO)
+    // POST /api/ef-onramp-quote — on-ramp (BRL → TESOURO). See vite.config.ts
+    // comment for why walletAddress matters (trustline auto-setup).
     if (url.pathname === '/api/ef-onramp-quote' && method === 'POST') {
-      const { customerId, sourceAmount } = (await req.json()) as { customerId: string; sourceAmount: string };
+      const { customerId, sourceAmount, walletAddress } = (await req.json()) as {
+        customerId: string; sourceAmount: string; walletAddress?: string;
+      };
       const quoteId = randomUUID();
-      const data = (await efetch('POST', '/ramp/quote', {
+      const body: Record<string, unknown> = {
         quoteId, customerId, blockchain: 'stellar',
         quoteAssets: { type: 'onramp', sourceAsset: 'BRL', targetAsset: TESOURO_ASSET },
         sourceAmount,
-      })) as Record<string, string | null>;
+      };
+      if (walletAddress) body.walletAddress = walletAddress;
+      const data = (await efetch('POST', '/ramp/quote', body)) as Record<string, string | null>;
       return json({
         quoteId: data.quoteId,
         sourceAmount: data.sourceAmount,
@@ -262,11 +279,19 @@ export default async (req: Request): Promise<Response> => {
         console.log('[ef-sandbox-approve] onboarding-url failed:', (err as Error).message);
       }
 
-      // 3. Accept both required agreements.
+      // 3. Accept all THREE required agreements. See vite.config.ts comment.
       if (presignedUrl) {
-        for (const path of ['/ramp/agreements/terms-and-conditions', '/ramp/agreements/customer-agreement']) {
+        const calls: Array<[string, Record<string, unknown>]> = [
+          ['/ramp/agreements/electronic-signature', { presignedUrl }],
+          ['/ramp/agreements/terms-and-conditions', { presignedUrl }],
+          ['/ramp/agreements/customer-agreement', {
+            presignedUrl,
+            customerInfo: SANDBOX_CUSTOMER_INFO,
+          }],
+        ];
+        for (const [path, body] of calls) {
           try {
-            await efetch('POST', path, { presignedUrl });
+            await efetch('POST', path, body);
           } catch (err) {
             console.log(`[ef-sandbox-approve] ${path} failed (likely already accepted):`, (err as Error).message);
           }
@@ -286,6 +311,8 @@ export default async (req: Request): Promise<Response> => {
         confirmedTxSignature: data.confirmedTxSignature ?? null,
         amountInTokens: data.amountInTokens ?? null,
         amountInFiat: data.amountInFiat ?? null,
+        stellarClaimTransaction: data.stellarClaimTransaction ?? null,
+        stellarClaimableBalanceId: data.stellarClaimableBalanceId ?? null,
       });
     }
 
