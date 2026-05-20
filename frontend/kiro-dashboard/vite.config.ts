@@ -348,6 +348,20 @@ function etherfuseApi(env: ApiEnv): Plugin {
           }
 
           // GET /api/ef-onramp-order?orderId=... — poll for completion.
+          // POST /api/ef-onramp-claim-tx — proxies to /ramp/order/{id}/regenerate_tx,
+          // which returns a fresh Stellar claim XDR for completed on-ramp orders.
+          // Fallback for when the order GET response comes back without the
+          // stored stellarClaimTransaction (observed with sandbox simulate-deposit).
+          if (parsed.pathname === '/api/ef-onramp-claim-tx' && method === 'POST') {
+            const { orderId } = JSON.parse(await readBody(req)) as { orderId: string };
+            const data = await efetch(env, 'POST', `/ramp/order/${orderId}/regenerate_tx`) as {
+              stellarClaimTransaction?: string;
+            };
+            return sendJson(res, {
+              stellarClaimTransaction: data.stellarClaimTransaction ?? null,
+            });
+          }
+
           if (parsed.pathname === '/api/ef-onramp-order' && method === 'GET') {
             const orderId = parsed.searchParams.get('orderId');
             const data = await efetch(env, 'GET', `/ramp/order/${orderId}`) as Record<string, unknown>;

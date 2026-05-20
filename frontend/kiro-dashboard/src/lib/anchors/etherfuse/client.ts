@@ -246,3 +246,16 @@ export async function createOnRampOrder(
 export async function getOnRampOrder(orderId: string): Promise<OnRampPollResult> {
   return apiFetch<OnRampPollResult>('GET', '/ef-onramp-order', undefined, { orderId });
 }
+
+/**
+ * Asks Etherfuse to rebuild and return a fresh Stellar claim XDR for a
+ * completed on-ramp order. Use as a fallback when the order GET response
+ * comes back with `stellarClaimTransaction: null` even though the order
+ * is completed (observed with sandbox simulate-deposit).
+ */
+export async function regenerateClaimXdr(orderId: string): Promise<string | null> {
+  const res = await apiFetch<{ stellarClaimTransaction: string | null }>(
+    'POST', '/ef-onramp-claim-tx', { orderId },
+  );
+  return res.stellarClaimTransaction;
+}

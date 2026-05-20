@@ -10,6 +10,7 @@ import {
   getOnRampQuote,
   createOnRampOrder,
   getOnRampOrder,
+  regenerateClaimXdr,
   sandboxApprove,
   type OnRampQuoteResult,
   type OnRampOrderResult,
@@ -101,14 +102,25 @@ export function ReceberPixModal({ open, onClose }: ReceberPixModalProps) {
             // First-time Stellar wallets without a TESOURO trustline receive
             // the tokens via a claimable balance — Etherfuse hands us an XDR
             // that does ChangeTrust + ClaimClaimableBalance in one tx. We
-            // sign it with the passkey and submit to Horizon. For wallets
-            // that already have the trustline, this field is null and we
-            // skip straight to done.
-            if (result.stellarClaimTransaction) {
+            // sign it with the passkey and submit to Horizon.
+            //
+            // The order GET sometimes returns `stellarClaimTransaction: null`
+            // even though a claim is needed (observed with sandbox
+            // simulate-deposit). Fall back to /regenerate_tx, which rebuilds
+            // and returns a fresh claim XDR synchronously. If the regenerate
+            // call also returns null OR errors, assume the wallet already had
+            // a trustline (no claim needed) and finish.
+            let claimXdr = result.stellarClaimTransaction;
+            if (!claimXdr) {
+              try {
+                claimXdr = await regenerateClaimXdr(orderId);
+              } catch { /* no claimable balance — proceed without claim */ }
+            }
+            if (claimXdr) {
               setStep('claiming');
               try {
                 setClaimingMsg('Aguardando assinatura na carteira...');
-                const signedXdr = await signTransaction(result.stellarClaimTransaction);
+                const signedXdr = await signTransaction(claimXdr);
                 setClaimingMsg('Enviando para Stellar...');
                 await submitXdr(signedXdr);
               } catch (err) {

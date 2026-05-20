@@ -301,6 +301,15 @@ export default async (req: Request): Promise<Response> => {
       return json({ ok: true, data: { status: kycStatus } });
     }
 
+    // POST /api/ef-onramp-claim-tx — fresh claim XDR via regenerate_tx.
+    if (url.pathname === '/api/ef-onramp-claim-tx' && method === 'POST') {
+      const { orderId } = (await req.json()) as { orderId: string };
+      const data = (await efetch('POST', `/ramp/order/${orderId}/regenerate_tx`)) as {
+        stellarClaimTransaction?: string;
+      };
+      return json({ stellarClaimTransaction: data.stellarClaimTransaction ?? null });
+    }
+
     // GET /api/ef-onramp-order — poll for on-ramp completion
     if (url.pathname === '/api/ef-onramp-order' && method === 'GET') {
       const orderId = url.searchParams.get('orderId');
@@ -336,6 +345,7 @@ export const config = {
     '/api/ef-order',
     '/api/ef-onramp-quote',
     '/api/ef-onramp-order',
+    '/api/ef-onramp-claim-tx',
     '/api/ef-sandbox-approve',
   ],
 };
