@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Download, Filter, Search, ShoppingBag, ArrowUpRight } from 'lucide-react';
+import { Download, Filter, Plus, Search, ShoppingBag, ArrowUpRight } from 'lucide-react';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { FilterChip } from '@/components/FilterChip';
@@ -9,8 +9,13 @@ import { fetchTesouroPayments, type WalletPayment } from '@/lib/stellar';
 
 type FilterKey = 'todos' | 'recebidos' | 'saques';
 
+interface TransacoesProps {
+  /** Opens the on-ramp modal. Optional because only mobile renders the trigger. */
+  onReceive?: () => void;
+}
+
 /** Full filterable list of every TESOURO movement on the connected wallet. */
-export default function Transacoes() {
+export default function Transacoes({ onReceive }: TransacoesProps) {
   const { publicKey, balance, isConnected } = useWallet();
   // `null` = haven't fetched yet (show skeleton). `[]` = fetched but empty.
   const [payments, setPayments] = useState<WalletPayment[] | null>(null);
@@ -61,6 +66,18 @@ export default function Transacoes() {
           <Button variant="secondary" size="sm" icon={Download}>
             Exportar CSV
           </Button>
+          {/* Mobile-only: desktop users already have the trigger on /recebimentos. */}
+          {onReceive && (
+            <Button
+              variant="primary"
+              size="sm"
+              icon={Plus}
+              onClick={onReceive}
+              className="md:hidden"
+            >
+              Novo recebimento
+            </Button>
+          )}
         </div>
       </div>
 
