@@ -351,19 +351,6 @@ export function WalletButtonMobile() {
         style={{ width: 44, height: 44, color: isConnected ? 'var(--kiro-green)' : 'var(--fg-2)' }}
       >
         <Icon size={22} strokeWidth={1.6} />
-        {isConnected && (
-          <span
-            className="absolute rounded-full bg-[var(--kiro-green)]"
-            style={{
-              top: 10,
-              right: 10,
-              width: 8,
-              height: 8,
-              boxShadow: '0 0 8px rgba(0,255,135,0.7)',
-            }}
-            aria-hidden="true"
-          />
-        )}
       </button>
 
       {sheetOpen && createPortal(
