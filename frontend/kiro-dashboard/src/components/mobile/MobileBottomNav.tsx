@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { House, BarChart3, Users, Menu, type LucideIcon } from 'lucide-react';
+import { House, BarChart3, Menu, type LucideIcon } from 'lucide-react';
 
 interface Tab {
   to: string;
