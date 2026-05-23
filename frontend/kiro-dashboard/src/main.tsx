@@ -7,6 +7,7 @@ import { DashboardProvider } from './context/DashboardContext';
 import { QuoteProvider } from './context/QuoteContext';
 import { NotificationsProvider } from './context/NotificationsContext';
 import { UserProfileProvider } from './context/UserProfileContext';
+import { MfaGuard } from './components/MfaGuard';
 import './index.css';
 
 const PRIVY_APP_ID = import.meta.env.VITE_PRIVY_APP_ID as string;
@@ -16,6 +17,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     <PrivyProvider
       appId={PRIVY_APP_ID}
       config={{
+        mfa: { noPromptOnMfaRequired: false },
         loginMethods: ['email', 'google', 'apple'],
         appearance: {
           theme: 'dark',
@@ -30,6 +32,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
         },
       }}
     >
+      <MfaGuard />
       <BrowserRouter>
         <UserProfileProvider>
           <WalletProvider>
