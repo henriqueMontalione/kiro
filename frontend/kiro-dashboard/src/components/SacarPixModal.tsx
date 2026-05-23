@@ -46,7 +46,6 @@ export function SacarPixModal({ open, onClose }: SacarPixModalProps) {
   const [amount, setAmount] = useState('');
   const [quote, setQuote] = useState<QuoteResult | null>(null);
   const [processingMsg, setProcessingMsg] = useState('');
-  const [txHash, setTxHash] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const [isSandboxApproving, setIsSandboxApproving] = useState(false);
 
@@ -189,7 +188,6 @@ export function SacarPixModal({ open, onClose }: SacarPixModalProps) {
     setAmount('');
     setQuote(null);
     setErrorMsg('');
-    setTxHash('');
 
     if (!isConnected || !publicKey) {
       setStep('no_wallet');
@@ -272,9 +270,8 @@ export function SacarPixModal({ open, onClose }: SacarPixModalProps) {
       const signedXdr = await signTransaction(xdr);
 
       setProcessingMsg('Enviando para Stellar...');
-      const hash = await submitXdr(signedXdr);
+      await submitXdr(signedXdr);
 
-      setTxHash(hash);
       setStep('done');
     } catch (err) {
       if (cancelRef.current) return;
@@ -692,17 +689,6 @@ export function SacarPixModal({ open, onClose }: SacarPixModalProps) {
                 O valor será creditado na sua conta em instantes.
               </p>
             </div>
-            {txHash && (
-              <div
-                className="rounded-[var(--radius-md)] border border-[var(--stroke-3)] w-full text-left"
-                style={{ padding: '10px 14px', background: 'var(--bg-3)' }}
-              >
-                <p className="text-[11px] text-[var(--fg-3)] mb-1 uppercase" style={{ letterSpacing: '0.04em' }}>
-                  Transação Stellar
-                </p>
-                <p className="text-[11px] text-[var(--fg-2)] font-mono break-all">{txHash}</p>
-              </div>
-            )}
             <Button variant="primary" size="lg" onClick={handleClose} className="w-full justify-center">
               Fechar
             </Button>
