@@ -411,13 +411,14 @@ export function ReceberPixModal({ open, onClose }: ReceberPixModalProps) {
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-[480px] max-w-full rounded-[var(--radius-xl)] border border-[var(--stroke-2)] p-5 md:p-7"
+        className="w-full max-w-[480px] rounded-[var(--radius-xl)] border border-[var(--stroke-2)] p-5 md:p-7"
         style={{
           background: 'rgba(20, 22, 32, 0.97)',
           backdropFilter: 'blur(24px) saturate(140%)',
           boxShadow: 'var(--shadow-3)',
           maxHeight: '92vh',
           overflowY: 'auto',
+          overflowX: 'hidden',
         }}
       >
         <div className="flex justify-between items-center mb-[22px]">
@@ -574,7 +575,7 @@ export function ReceberPixModal({ open, onClose }: ReceberPixModalProps) {
                   value={amountDisplay}
                   onChange={(e) => setAmount(e.target.value.replace(/\D/g, ''))}
                   placeholder="0,00"
-                  className="bg-transparent border-none outline-none flex-1 k-money font-medium"
+                  className="bg-transparent border-none outline-none flex-1 min-w-0 k-money font-medium"
                   style={{ fontSize: 28, color: 'var(--kiro-green)' }}
                   autoFocus
                 />

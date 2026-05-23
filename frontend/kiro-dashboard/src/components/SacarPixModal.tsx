@@ -396,13 +396,14 @@ export function SacarPixModal({ open, onClose }: SacarPixModalProps) {
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-[480px] max-w-full rounded-[var(--radius-xl)] border border-[var(--stroke-2)] p-5 md:p-7"
+        className="w-full max-w-[480px] rounded-[var(--radius-xl)] border border-[var(--stroke-2)] p-5 md:p-7"
         style={{
           background: 'rgba(20, 22, 32, 0.97)',
           backdropFilter: 'blur(24px) saturate(140%)',
           boxShadow: 'var(--shadow-3)',
           maxHeight: '92vh',
           overflowY: 'auto',
+          overflowX: 'hidden',
         }}
       >
         {/* Header */}
