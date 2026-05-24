@@ -103,10 +103,6 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         if (WALLET_NETWORK === 'TESTNET') {
           fetch(`${FRIENDBOT_URL}?addr=${encodeURIComponent(pk)}`).catch(() => {});
         }
-
-        fetchTesouroBalance(pk)
-          .then((bal) => { if (!cancelled) setBalance(bal); })
-          .catch(() => {});
       } catch (err) {
         console.error('[Wallet] Stellar derivation failed:', err);
         // Reset gate so the user can retry via connect()
@@ -123,6 +119,18 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   // it causes the effect to re-run on every render in some Privy versions.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, authenticated, wallets, publicKey]);
+
+  // Separate effect: whenever publicKey is resolved (or changed), load the
+  // balance. Isolated from the derivation effect so that `setPublicKey` doesn't
+  // cancel its own in-flight `fetchTesouroBalance` via the cleanup.
+  useEffect(() => {
+    if (!publicKey) return;
+    let cancelled = false;
+    fetchTesouroBalance(publicKey)
+      .then((bal) => { if (!cancelled) setBalance(bal); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [publicKey]);
 
   const connect = useCallback(() => {
     if (!authenticated) {

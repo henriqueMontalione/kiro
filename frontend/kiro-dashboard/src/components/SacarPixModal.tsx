@@ -139,6 +139,7 @@ export function SacarPixModal({ open, onClose }: SacarPixModalProps) {
         bankAccId = result.bankAccountId;
         localStorage.setItem(CUSTOMER_KEY, customerId);
         localStorage.setItem(BANK_ACCOUNT_KEY, bankAccId);
+        window.dispatchEvent(new Event('kiro:customerIdReady'));
         customerIdRef.current = customerId;
         bankAccountIdRef.current = bankAccId;
 
@@ -354,6 +355,7 @@ export function SacarPixModal({ open, onClose }: SacarPixModalProps) {
       bankAccountIdRef.current = result.bankAccountId;
       localStorage.setItem(CUSTOMER_KEY, result.customerId);
       localStorage.setItem(BANK_ACCOUNT_KEY, result.bankAccountId);
+      window.dispatchEvent(new Event('kiro:customerIdReady'));
       setKycUrl(result.kycUrl);
       setStep('kyc');
     } catch (err) {

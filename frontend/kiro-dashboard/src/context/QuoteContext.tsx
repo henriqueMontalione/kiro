@@ -64,6 +64,14 @@ export function QuoteProvider({ children }: { children: ReactNode }) {
     if (refreshTick > 0) fetchRate();
   }, [refreshTick, fetchRate]);
 
+  // Triggered when ReceberPixModal / SacarPixModal first stores a customerId —
+  // lets the quote fetch immediately instead of waiting for the next poll tick.
+  useEffect(() => {
+    const handler = () => fetchRate();
+    window.addEventListener('kiro:customerIdReady', handler);
+    return () => window.removeEventListener('kiro:customerIdReady', handler);
+  }, [fetchRate]);
+
   const formatTesouroAsBRL = useCallback(
     (tesouro: string | number) => {
       const t = typeof tesouro === 'string' ? parseFloat(tesouro) : tesouro;
