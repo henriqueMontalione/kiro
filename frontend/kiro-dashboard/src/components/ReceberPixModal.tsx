@@ -123,9 +123,9 @@ export function ReceberPixModal({ open, onClose }: ReceberPixModalProps) {
             if (claimXdr) {
               setStep('claiming');
               try {
-                setClaimingMsg('Aguardando assinatura na carteira...');
+                setClaimingMsg('Autorizando recebimento...');
                 const signedXdr = await signTransaction(claimXdr);
-                setClaimingMsg('Enviando para Stellar...');
+                setClaimingMsg('Finalizando...');
                 await submitXdr(signedXdr);
               } catch (err) {
                 setErrorMsg(err instanceof Error ? err.message : 'Erro ao reivindicar TESOURO');
@@ -712,8 +712,7 @@ export function ReceberPixModal({ open, onClose }: ReceberPixModalProps) {
             <Loader2 size={32} strokeWidth={1.5} className="animate-spin" style={{ color: 'var(--kiro-green)' }} />
             <span className="text-[14px] text-[var(--fg-2)]">{claimingMsg}</span>
             <p className="text-[12px] text-[var(--fg-3)] text-center max-w-[320px] leading-relaxed">
-              Sua carteira ainda não tem trustline pra TESOURO. Estamos criando
-              o trustline e reivindicando os tokens em uma única transação.
+              Primeira vez recebendo? Estamos configurando sua conta automaticamente — isso leva alguns segundos.
             </p>
           </div>
         )}

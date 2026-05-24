@@ -261,16 +261,16 @@ export function SacarPixModal({ open, onClose }: SacarPixModalProps) {
     cancelRef.current = false;
 
     try {
-      setProcessingMsg('Criando ordem...');
+      setProcessingMsg('Preparando saque...');
       const { orderId } = await createOrder(quote.quoteId, publicKey, bankAccountIdRef.current);
 
-      setProcessingMsg('Aguardando transação Stellar...');
+      setProcessingMsg('Aguardando confirmação da rede...');
       const xdr = await pollForXdr(orderId);
 
-      setProcessingMsg('Aguardando assinatura na carteira...');
+      setProcessingMsg('Autorizando...');
       const signedXdr = await signTransaction(xdr);
 
-      setProcessingMsg('Enviando para Stellar...');
+      setProcessingMsg('Finalizando...');
       await submitXdr(signedXdr);
 
       setStep('done');
