@@ -1,10 +1,10 @@
-import { Diamond, ChevronRight, Eye, EyeOff, RefreshCw } from 'lucide-react';
+import { Diamond, ChevronRight, Eye, EyeOff, RefreshCw, Loader2 } from 'lucide-react';
 import { Card, CardEyebrow } from '../Card';
 import { Button } from '../Button';
 import { BALANCE } from '@/lib/mocks';
 import { useWallet } from '@/context/WalletContext';
 import { useDashboard } from '@/context/DashboardContext';
-import { formatBRL } from '@/lib/stellar';
+import { useQuote } from '@/context/QuoteContext';
 
 interface BalanceCardProps {
   onReceive: () => void;
@@ -13,8 +13,15 @@ interface BalanceCardProps {
 export function BalanceCard({ onReceive }: BalanceCardProps) {
   const { isConnected, balance } = useWallet();
   const { valuesHidden, toggleValuesHidden, refresh, isRefreshing } = useDashboard();
+  const { formatTesouroAsBRL, brlPerTesouro } = useQuote();
 
-  const displayBalance = isConnected && balance !== null ? formatBRL(balance) : 'R$ 0,00';
+  const tesouroAmount = isConnected && balance !== null ? parseFloat(balance) : null;
+  const rateReady = brlPerTesouro !== null;
+  const displayBRL =
+    tesouroAmount !== null && rateReady
+      ? formatTesouroAsBRL(tesouroAmount)
+      : null;
+
   const isBlurred = !isConnected || valuesHidden;
 
   return (
@@ -63,21 +70,31 @@ export function BalanceCard({ onReceive }: BalanceCardProps) {
         )}
       </CardEyebrow>
 
-      <div
-        className="k-money font-medium"
-        style={{
-          fontSize: 64,
-          lineHeight: 1.05,
-          color: 'var(--kiro-green)',
-          textShadow: '0 0 30px rgba(0,255,135,0.30)',
-          letterSpacing: '-0.01em',
-          filter: isBlurred ? 'blur(14px)' : 'none',
-          transition: 'filter 200ms ease-out',
-          userSelect: isBlurred ? 'none' : 'auto',
-        }}
-      >
-        {displayBalance}
-      </div>
+      {/* Primary: BRL equivalent — spinner while rate is loading */}
+      {displayBRL !== null ? (
+        <div
+          className="k-money font-medium"
+          style={{
+            fontSize: 64,
+            lineHeight: 1.05,
+            color: 'var(--kiro-green)',
+            textShadow: '0 0 30px rgba(0,255,135,0.30)',
+            letterSpacing: '-0.01em',
+            filter: isBlurred ? 'blur(14px)' : 'none',
+            transition: 'filter 200ms ease-out',
+            userSelect: isBlurred ? 'none' : 'auto',
+          }}
+        >
+          {displayBRL}
+        </div>
+      ) : (
+        <div className="flex items-center gap-2 mt-3" style={{ height: 67 }}>
+          {isConnected
+            ? <Loader2 size={22} strokeWidth={1.5} className="animate-spin" style={{ color: 'var(--fg-3)' }} />
+            : <span className="k-money font-medium" style={{ fontSize: 64, lineHeight: 1.05, color: 'var(--fg-3)' }}>—</span>
+          }
+        </div>
+      )}
 
       <div className="mt-[14px] flex items-center gap-2 font-sans text-[12px] text-[var(--fg-3)]">
         <span
