@@ -6,6 +6,7 @@ import { MobileHeader } from '@/components/mobile/MobileHeader';
 import { MobileBottomNav } from '@/components/mobile/MobileBottomNav';
 import { ReceberPixModal } from '@/components/ReceberPixModal';
 import { SacarPixModal } from '@/components/SacarPixModal';
+import { WalletSignModal } from '@/components/WalletSignModal';
 import Resumo from '@/pages/Resumo';
 // On /resumo, "Receber via PIX" triggers the off-ramp flow (TESOURO → BRL).
 // On /recebimentos, the same prop name still means "receive a customer payment"
@@ -87,6 +88,7 @@ export default function App() {
 
       <ReceberPixModal open={pixOpen} onClose={closePix} />
       <SacarPixModal open={sacarOpen} onClose={closeSacar} />
+      <WalletSignModal />
     </div>
   );
 }

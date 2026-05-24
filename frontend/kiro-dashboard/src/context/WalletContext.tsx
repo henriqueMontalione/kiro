@@ -23,8 +23,12 @@ interface WalletState {
   /** Raw TESOURO balance from Horizon (e.g. "1000.0000000"), or null when not connected. */
   balance: string | null;
   isLoading: boolean;
+  /** True while waiting for the user to confirm the one-time wallet setup screen. */
+  needsSignatureConfirmation: boolean;
   connect: () => void;
   disconnect: () => void;
+  /** Called by the wallet setup modal — dismisses our screen and starts the Privy sign flow. */
+  confirmDerivation: () => void;
   /** Signs an XDR transaction envelope with the derived Stellar keypair. */
   signTransaction: (xdr: string) => Promise<string>;
   /** Re-fetches the TESOURO balance from Horizon. No-op if not connected. */
@@ -40,6 +44,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [publicKey, setPublicKey] = useState<string | null>(null);
   const [balance, setBalance] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [needsSignatureConfirmation, setNeedsSignatureConfirmation] = useState(false);
+  // Becomes true when the user explicitly clicks "Criar carteira" on our screen.
+  const [derivationConfirmed, setDerivationConfirmed] = useState(false);
 
   // Stellar keypair lives in a ref — it never needs to trigger re-renders
   // and we want to minimize the window it stays in JS memory.
@@ -57,6 +64,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!ready || !authenticated) {
       derivingRef.current = false; // reset gate on logout so next login can derive
+      setDerivationConfirmed(false);
+      setNeedsSignatureConfirmation(false);
       return;
     }
     if (publicKey) return; // already active this session
@@ -65,6 +74,14 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const embeddedWallet = wallets.find((w) => w.walletClientType === 'privy');
     if (!embeddedWallet) return;
 
+    if (!derivationConfirmed) {
+      // Show our explanation screen before triggering Privy's sign modal.
+      setNeedsSignatureConfirmation(true);
+      return;
+    }
+
+    // User confirmed — proceed with the actual derivation.
+    setNeedsSignatureConfirmation(false);
     derivingRef.current = true;
     let cancelled = false;
     setIsLoading(true);
@@ -99,6 +116,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         if (cancelled) return;
 
         setPublicKey(pk);
+        localStorage.setItem('kiro_stellar_pk', pk);
 
         if (WALLET_NETWORK === 'TESTNET') {
           fetch(`${FRIENDBOT_URL}?addr=${encodeURIComponent(pk)}`).catch(() => {});
@@ -118,7 +136,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   // logout intentionally omitted: it's a stable Privy function and including
   // it causes the effect to re-run on every render in some Privy versions.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, authenticated, wallets, publicKey]);
+  }, [ready, authenticated, wallets, publicKey, derivationConfirmed]);
 
   // Separate effect: whenever publicKey is resolved (or changed), load the
   // balance. Isolated from the derivation effect so that `setPublicKey` doesn't
@@ -131,6 +149,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       .catch(() => {});
     return () => { cancelled = true; };
   }, [publicKey]);
+
+  const confirmDerivation = useCallback(() => {
+    setDerivationConfirmed(true);
+  }, []);
 
   const connect = useCallback(() => {
     if (!authenticated) {
@@ -168,8 +190,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         balance,
         // Show loading while Privy SDK initialises or while deriving
         isLoading: !ready || isLoading,
+        needsSignatureConfirmation,
         connect,
         disconnect,
+        confirmDerivation,
         signTransaction,
         refreshBalance,
       }}
