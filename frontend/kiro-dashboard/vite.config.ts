@@ -75,25 +75,6 @@ const SANDBOX_KYC_IDENTITY = {
   idNumbers: [{ value: '00000000191', type: 'CPF' }],
 };
 
-// customerInfo payload for the customer-agreement acceptance. The openapi
-// marks it "optional" but the live API rejects each missing field one at a
-// time ("Phone not provided" → "Email not provided" → "Occupation not
-// provided" → ...). Schema is `ProofOfIdentityUserInfo` from openapi.yaml,
-// so we send the full shape upfront to short-circuit the iteration.
-const SANDBOX_CUSTOMER_INFO = {
-  email: 'sandbox@kiro.test',
-  phoneNumber: '+5511999999999',
-  dateOfBirth: '1990-01-15',
-  // Both `name` and `address` are flat strings in the live API's
-  // customerInfo struct, even though openapi.yaml's ProofOfIdentityUserInfo
-  // types them as objects. Sending the object form gets rejected with
-  // "invalid type: map, expected a string".
-  name: 'Sandbox Tester',
-  address: 'Av. Paulista 1000, Sao Paulo, SP 01310-100, BR',
-  idNumbers: [{ value: '00000000191', type: 'CPF' }],
-  occupation: 'Software Developer',
-  identificationType: 'CPF',
-};
 
 /**
  * Etherfuse off-ramp proxy. Runs as Vite middleware so the API key stays
@@ -328,10 +309,8 @@ function etherfuseApi(env: ApiEnv): Plugin {
             const agreementCalls: Array<[string, (url: string) => Record<string, unknown>]> = [
               ['/ramp/agreements/electronic-signature', (url) => ({ presignedUrl: url })],
               ['/ramp/agreements/terms-and-conditions', (url) => ({ presignedUrl: url })],
-              ['/ramp/agreements/customer-agreement', (url) => ({
-                presignedUrl: url,
-                customerInfo: SANDBOX_CUSTOMER_INFO,
-              })],
+              // customerInfo omitted — programmatic KYC already submitted identity data
+              ['/ramp/agreements/customer-agreement', (url) => ({ presignedUrl: url })],
             ];
             for (const [path, buildBody] of agreementCalls) {
               const url = await freshUrl();

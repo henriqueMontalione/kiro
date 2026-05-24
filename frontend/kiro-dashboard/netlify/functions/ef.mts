@@ -64,6 +64,7 @@ function json(data: unknown, status = 200): Response {
 const SANDBOX_KYC_IDENTITY = {
   name: { givenName: 'Sandbox', familyName: 'Tester' },
   dateOfBirth: '1990-01-15',
+  phoneNumber: '+5511999999999',
   address: {
     street: 'Av. Paulista 1000',
     city: 'Sao Paulo',
@@ -74,17 +75,6 @@ const SANDBOX_KYC_IDENTITY = {
   idNumbers: [{ value: '00000000191', type: 'CPF' }],
 };
 
-const SANDBOX_CUSTOMER_INFO = {
-  email: 'sandbox@kiro.test',
-  phoneNumber: '+5511999999999',
-  dateOfBirth: '1990-01-15',
-  // Both `name` and `address` are flat strings here. See vite.config.ts.
-  name: 'Sandbox Tester',
-  address: 'Av. Paulista 1000, Sao Paulo, SP 01310-100, BR',
-  idNumbers: [{ value: '00000000191', type: 'CPF' }],
-  occupation: 'Software Developer',
-  identificationType: 'CPF',
-};
 
 export default async (req: Request): Promise<Response> => {
   const url = new URL(req.url);
@@ -284,10 +274,8 @@ export default async (req: Request): Promise<Response> => {
         const calls: Array<[string, Record<string, unknown>]> = [
           ['/ramp/agreements/electronic-signature', { presignedUrl }],
           ['/ramp/agreements/terms-and-conditions', { presignedUrl }],
-          ['/ramp/agreements/customer-agreement', {
-            presignedUrl,
-            customerInfo: SANDBOX_CUSTOMER_INFO,
-          }],
+          // customerInfo omitted — programmatic KYC already submitted identity data
+          ['/ramp/agreements/customer-agreement', { presignedUrl }],
         ];
         for (const [path, body] of calls) {
           try {
