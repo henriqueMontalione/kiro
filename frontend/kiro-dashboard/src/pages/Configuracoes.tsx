@@ -3,6 +3,8 @@ import { Camera, Check, Mail, Trash2, User } from 'lucide-react';
 import { Button } from '@/components/Button';
 import { Card, CardEyebrow } from '@/components/Card';
 import { useUserProfile } from '@/context/UserProfileContext';
+import { truncateKey } from '@/lib/stellar';
+import { StatusTag } from '@/components/StatusTag';
 
 const MAX_PHOTO_BYTES = 1 * 1024 * 1024;
 
@@ -126,6 +128,15 @@ export default function Configuracoes() {
             <span className="font-display text-[18px] font-semibold text-[var(--fg-1)] truncate">
               {trimmed || '—'}
             </span>
+            {profile.profile?.stellar_public_key && (
+              <div className="self-start" title={profile.profile.stellar_public_key}>
+                <StatusTag status="neutral" withIcon={false}>
+                  <span className="font-mono tracking-tight leading-none">
+                    ID: {truncateKey(profile.profile.stellar_public_key)}
+                  </span>
+                </StatusTag>
+              </div>
+            )}
             <span className="text-[13px] text-[var(--fg-3)]">{profile.role}</span>
             {photoPreview && (
               <button
@@ -177,24 +188,29 @@ export default function Configuracoes() {
         </div>
 
         <div
-          className="flex items-center justify-end gap-3 mt-7 pt-5 border-t"
+          className="mt-7 pt-5 border-t"
           style={{ borderColor: 'var(--stroke-1)' }}
         >
-          {saved && (
-            <span
-              className="inline-flex items-center gap-[6px] text-[13px] mr-auto"
-              style={{ color: 'var(--kiro-green)' }}
-            >
-              <Check size={14} strokeWidth={2} />
-              Alterações salvas
-            </span>
-          )}
-          <Button variant="ghost" onClick={handleCancel} disabled={!dirty || saving}>
-            Cancelar
-          </Button>
-          <Button variant="primary" onClick={handleSave} disabled={!canSave}>
-            {saving ? 'Salvando...' : 'Salvar alterações'}
-          </Button>
+          {/* Fixed-height slot so the buttons don't jump when the message appears. */}
+          <div className="flex items-center mb-3" style={{ minHeight: 18 }}>
+            {saved && (
+              <span
+                className="inline-flex items-center gap-[6px] text-[13px]"
+                style={{ color: 'var(--kiro-green)' }}
+              >
+                <Check size={14} strokeWidth={2} />
+                Alterações salvas
+              </span>
+            )}
+          </div>
+          <div className="flex items-center justify-end gap-3 flex-wrap">
+            <Button variant="ghost" onClick={handleCancel} disabled={!dirty || saving}>
+              Cancelar
+            </Button>
+            <Button variant="primary" onClick={handleSave} disabled={!canSave}>
+              {saving ? 'Salvando...' : 'Salvar alterações'}
+            </Button>
+          </div>
         </div>
       </Card>
     </div>
