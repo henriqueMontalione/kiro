@@ -390,6 +390,14 @@ export function SacarPixModal({ open, onClose }: SacarPixModalProps) {
     ? amountBRL.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
     : '';
 
+  // "Sacar tudo" reserves R$ 0,05 of headroom for the Etherfuse fee so the
+  // resulting tesouroEquivalent stays within the wallet's balance.
+  const SACAR_TUDO_FEE_BUFFER = 0.05;
+  const sacarTudoCents =
+    maxBRL != null && maxBRL > SACAR_TUDO_FEE_BUFFER
+      ? Math.floor((maxBRL - SACAR_TUDO_FEE_BUFFER) * 100)
+      : null;
+
   return (
     <div
       onClick={handleClose}
@@ -577,9 +585,20 @@ export function SacarPixModal({ open, onClose }: SacarPixModalProps) {
                   autoFocus
                 />
               </div>
-              <p className="text-[12px] text-[var(--fg-3)]">
-                Saldo disponível: {balance && brlPerTesouro != null ? formatTesouroAsBRL(balance) : '—'}
-              </p>
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-[12px] text-[var(--fg-3)]">
+                  Saldo disponível: {balance && brlPerTesouro != null ? formatTesouroAsBRL(balance) : '—'}
+                </p>
+                {sacarTudoCents != null && (
+                  <button
+                    type="button"
+                    onClick={() => setAmount(String(sacarTudoCents))}
+                    className="text-[12px] font-medium text-[var(--kiro-green)] bg-transparent border-none cursor-pointer hover:underline"
+                  >
+                    Sacar tudo
+                  </button>
+                )}
+              </div>
               {brlPerTesouro == null && (
                 <button
                   type="button"
