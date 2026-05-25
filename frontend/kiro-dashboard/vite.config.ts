@@ -77,6 +77,82 @@ const SANDBOX_KYC_IDENTITY = {
 
 
 /**
+ * Stellar account-activation and transaction-submit proxy.
+ * Mirrors the behaviour of netlify/functions/stellar.mts for local dev:
+ *   - POST /api/stellar-activate  testnet → friendbot; mainnet → not needed in dev
+ *   - POST /api/stellar-submit    testnet → direct Horizon submit
+ */
+function stellarApi(stellarEnv: { network: string; horizonUrl: string; friendbotUrl: string }): Plugin {
+  console.log('[stellar-api] plugin instantiated. network:', stellarEnv.network);
+  return {
+    name: 'kiro-stellar-api',
+    configureServer(server) {
+      console.log('[stellar-api] configureServer called — registering middleware');
+      server.middlewares.use(async (req, res, next) => {
+        const url = req.url ?? '';
+        if (!url.startsWith('/api/stellar-')) return next();
+        console.log('[stellar-api]', req.method, url);
+
+        const parsed = new URL(url, 'http://localhost');
+        const method = req.method ?? 'GET';
+
+        try {
+          // Dev: verify Bearer token is present (signature not checked locally).
+          const auth = (req.headers['authorization'] as string | undefined) ?? '';
+          if (!auth.startsWith('Bearer ')) {
+            console.log('[stellar-api] missing bearer token → 401');
+            return sendJson(res, { error: 'Não autorizado' }, 401);
+          }
+
+          if (parsed.pathname === '/api/stellar-activate' && method === 'POST') {
+            const { publicKey } = JSON.parse(await readBody(req)) as { publicKey: string };
+
+            // Check if account already exists on Horizon.
+            try {
+              const chk = await fetch(`${stellarEnv.horizonUrl}/accounts/${encodeURIComponent(publicKey)}`);
+              if (chk.ok) return sendJson(res, { funded: false, existed: true });
+            } catch { /* proceed to create */ }
+
+            // Testnet: delegate to friendbot.
+            const fbRes = await fetch(`${stellarEnv.friendbotUrl}?addr=${encodeURIComponent(publicKey)}`);
+            if (!fbRes.ok) {
+              const text = await fbRes.text();
+              console.error('[stellar-activate] friendbot failed:', text.slice(0, 200));
+              return sendJson(res, { error: 'Friendbot falhou' }, 502);
+            }
+            return sendJson(res, { funded: true, existed: false });
+          }
+
+          if (parsed.pathname === '/api/stellar-submit' && method === 'POST') {
+            const { signedXdr } = JSON.parse(await readBody(req)) as { signedXdr: string };
+            const submitRes = await fetch(`${stellarEnv.horizonUrl}/transactions`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+              body: new URLSearchParams({ tx: signedXdr }),
+            });
+            const data = await submitRes.json() as { hash?: string; extras?: { result_codes?: { transaction?: string; operations?: string[] } } };
+            if (!submitRes.ok) {
+              const rc = data.extras?.result_codes;
+              const ops = rc?.operations?.length ? `, ops=[${rc.operations.join(',')}]` : '';
+              const msg = `tx_result=${rc?.transaction ?? 'unknown'}${ops}`;
+              console.error('[stellar-submit] failed:', msg);
+              return sendJson(res, { error: msg }, 400);
+            }
+            return sendJson(res, { hash: data.hash });
+          }
+
+          return sendJson(res, { error: 'Not found' }, 404);
+        } catch (err) {
+          const e = err as Error;
+          console.error('[stellar]', e.message);
+          return sendJson(res, { error: e.message ?? 'Internal error' }, 500);
+        }
+      });
+    },
+  };
+}
+
+/**
  * Etherfuse off-ramp proxy. Runs as Vite middleware so the API key stays
  * server-side and `npm run dev` boots both UI and proxy in one terminal.
  */
@@ -376,11 +452,17 @@ export default defineConfig(({ mode }) => {
     baseUrl: (raw.ETHERFUSE_BASE_URL ?? 'https://api.sand.etherfuse.com').replace(/\/$/, ''),
     tesouroAsset: `${raw.VITE_TESOURO_CODE ?? 'TESOURO'}:${raw.VITE_TESOURO_ISSUER ?? ''}`,
   };
+  const isMainnet = (raw.VITE_STELLAR_NETWORK ?? 'TESTNET') === 'PUBLIC';
+  const stellarEnv = {
+    network: raw.VITE_STELLAR_NETWORK ?? 'TESTNET',
+    horizonUrl: (raw.VITE_HORIZON_URL ?? (isMainnet ? 'https://horizon.stellar.org' : 'https://horizon-testnet.stellar.org')).replace(/\/$/, ''),
+    friendbotUrl: 'https://friendbot.stellar.org',
+  };
 
   return {
-    // Order matters: etherfuseApi first so its middleware is installed before
+    // Order matters: API plugins first so their middleware is installed before
     // Vite's SPA-fallback that returns index.html for unknown routes.
-    plugins: [etherfuseApi(apiEnv), react()],
+    plugins: [stellarApi(stellarEnv), etherfuseApi(apiEnv), react()],
     resolve: {
       alias: {
         '@': path.resolve(__dirname, './src'),

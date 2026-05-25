@@ -3,6 +3,7 @@ import { X, ChevronLeft, ChevronRight, Loader2, CheckCircle, AlertCircle, Copy, 
 import { Button } from './Button';
 import { useWallet } from '@/context/WalletContext';
 import { formatBRL, submitXdr } from '@/lib/stellar';
+import { usePrivy } from '@privy-io/react-auth';
 import {
   startOnboarding,
   getKycStatus,
@@ -43,6 +44,7 @@ interface ReceberPixModalProps {
 
 export function ReceberPixModal({ open, onClose }: ReceberPixModalProps) {
   const { isConnected, publicKey, connect, signTransaction, refreshBalance } = useWallet();
+  const { getAccessToken } = usePrivy();
 
   const [step, setStep] = useState<Step>('loading');
   const [kycUrl, setKycUrl] = useState('');
@@ -124,9 +126,10 @@ export function ReceberPixModal({ open, onClose }: ReceberPixModalProps) {
               setStep('claiming');
               try {
                 setClaimingMsg('Autorizando recebimento...');
-                const signedXdr = await signTransaction(claimXdr);
+                const [signedXdr, authToken] = await Promise.all([signTransaction(claimXdr), getAccessToken()]);
+                if (!authToken) throw new Error('Sessão expirada. Faça login novamente.');
                 setClaimingMsg('Finalizando...');
-                await submitXdr(signedXdr);
+                await submitXdr(signedXdr, authToken);
               } catch (err) {
                 setErrorMsg(err instanceof Error ? err.message : 'Erro ao reivindicar TESOURO');
                 setStep('error');

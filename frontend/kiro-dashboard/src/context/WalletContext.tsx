@@ -9,10 +9,8 @@ import {
 } from 'react';
 import { usePrivy, useWallets } from '@privy-io/react-auth';
 import { Keypair, TransactionBuilder } from '@stellar/stellar-sdk';
-import { fetchTesouroBalance, NETWORK_PASSPHRASE, WALLET_NETWORK } from '@/lib/stellar';
+import { fetchTesouroBalance, NETWORK_PASSPHRASE } from '@/lib/stellar';
 import { deriveEdSeedFromPrf, wipeBytes } from '@/lib/passkey/crypto';
-
-const FRIENDBOT_URL = 'https://friendbot.stellar.org';
 
 // This message is part of the key derivation — changing it rotates every wallet.
 const DERIVATION_MESSAGE = 'kiro:stellar:seed:v1';
@@ -38,7 +36,7 @@ interface WalletState {
 const WalletContext = createContext<WalletState | null>(null);
 
 export function WalletProvider({ children }: { children: ReactNode }) {
-  const { ready, authenticated, login, logout } = usePrivy();
+  const { ready, authenticated, login, logout, getAccessToken } = usePrivy();
   const { wallets } = useWallets();
 
   const [publicKey, setPublicKey] = useState<string | null>(null);
@@ -118,9 +116,17 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         setPublicKey(pk);
         localStorage.setItem('kiro_stellar_pk', pk);
 
-        if (WALLET_NETWORK === 'TESTNET') {
-          fetch(`${FRIENDBOT_URL}?addr=${encodeURIComponent(pk)}`).catch(() => {});
-        }
+        getAccessToken().then((token) => {
+          if (!token) return;
+          fetch('/api/stellar-activate', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`,
+            },
+            body: JSON.stringify({ publicKey: pk }),
+          });
+        }).catch(() => {});
       } catch (err) {
         console.error('[Wallet] Stellar derivation failed:', err);
         // Reset gate so the user can retry via connect()

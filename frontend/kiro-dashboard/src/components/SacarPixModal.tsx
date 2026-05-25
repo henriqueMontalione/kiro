@@ -4,6 +4,7 @@ import { Button } from './Button';
 import { useWallet } from '@/context/WalletContext';
 import { useQuote } from '@/context/QuoteContext';
 import { formatBRL, submitXdr } from '@/lib/stellar';
+import { usePrivy } from '@privy-io/react-auth';
 import {
   startOnboarding,
   getKycStatus,
@@ -39,6 +40,7 @@ interface SacarPixModalProps {
 
 export function SacarPixModal({ open, onClose }: SacarPixModalProps) {
   const { isConnected, publicKey, balance, connect, signTransaction, refreshBalance } = useWallet();
+  const { getAccessToken } = usePrivy();
   const { brlPerTesouro, brlToTesouro, formatTesouroAsBRL, refresh: refreshRate } = useQuote();
 
   const [step, setStep] = useState<Step>('loading');
@@ -268,10 +270,11 @@ export function SacarPixModal({ open, onClose }: SacarPixModalProps) {
       const xdr = await pollForXdr(orderId);
 
       setProcessingMsg('Autorizando...');
-      const signedXdr = await signTransaction(xdr);
+      const [signedXdr, authToken] = await Promise.all([signTransaction(xdr), getAccessToken()]);
+      if (!authToken) throw new Error('Sessão expirada. Faça login novamente.');
 
       setProcessingMsg('Finalizando...');
-      await submitXdr(signedXdr);
+      await submitXdr(signedXdr, authToken);
 
       setStep('done');
     } catch (err) {

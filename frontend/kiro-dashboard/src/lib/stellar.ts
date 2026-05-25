@@ -1,11 +1,9 @@
-import { Horizon, Networks, TransactionBuilder } from '@stellar/stellar-sdk';
+import { Horizon, Networks } from '@stellar/stellar-sdk';
 
 const networkKey = (import.meta.env.VITE_STELLAR_NETWORK ?? 'TESTNET') as keyof typeof Networks;
 
 
 export const NETWORK_PASSPHRASE: string = Networks[networkKey];
-
-export const WALLET_NETWORK = networkKey === 'TESTNET' ? 'TESTNET' : 'PUBLIC';
 
 export const TESOURO_CODE: string = import.meta.env.VITE_TESOURO_CODE ?? 'TESOURO';
 export const TESOURO_ISSUER: string = import.meta.env.VITE_TESOURO_ISSUER ?? '';
@@ -45,10 +43,28 @@ export function truncateKey(key: string): string {
   return `${key.slice(0, 4)}…${key.slice(-4)}`;
 }
 
-export async function submitXdr(signedXdr: string): Promise<string> {
-  const tx = TransactionBuilder.fromXDR(signedXdr, NETWORK_PASSPHRASE);
-  const result = await horizonServer.submitTransaction(tx);
-  return result.hash;
+export async function submitXdr(signedXdr: string, authToken: string): Promise<string> {
+  const res = await fetch('/api/stellar-submit', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${authToken}`,
+    },
+    body: JSON.stringify({ signedXdr }),
+  });
+  // Read as text first so empty/HTML bodies (e.g. SPA fallback if the dev
+  // proxy isn't loaded) surface as a clear error instead of a JSON parse crash.
+  const raw = await res.text();
+  let data: { hash?: string; error?: string } = {};
+  if (raw) {
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      throw new Error(`Resposta inválida do servidor (HTTP ${res.status}). Reinicie o dev server.`);
+    }
+  }
+  if (!res.ok || !data.hash) throw new Error(data.error ?? `Falha ao submeter transação (HTTP ${res.status})`);
+  return data.hash;
 }
 
 export interface WalletPayment {
