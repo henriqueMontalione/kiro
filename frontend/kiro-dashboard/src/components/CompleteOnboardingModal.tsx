@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { Loader2, Store, AlertCircle } from 'lucide-react';
 import { Button } from './Button';
 import { useUserProfile } from '@/context/UserProfileContext';
+import { currentRequiredConsents } from '@/lib/legal';
 
 type PixKeyType = 'cpf' | 'cnpj' | 'email' | 'phone';
 
@@ -99,6 +100,7 @@ export function CompleteOnboardingModal() {
   const [pixValue, setPixValue] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [consentAccepted, setConsentAccepted] = useState(false);
 
   // Pre-fill the email from Privy once available.
   useEffect(() => {
@@ -119,7 +121,8 @@ export function CompleteOnboardingModal() {
     storeName.trim().length > 0 &&
     cnpjValid &&
     emailValid &&
-    pixError === '';
+    pixError === '' &&
+    consentAccepted;
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -132,6 +135,7 @@ export function CompleteOnboardingModal() {
         cnpj: digitsOnly(cnpj),
         email: email.trim().toLowerCase(),
         pix_key: normalizePixKey(pixType, pixValue),
+        consents: currentRequiredConsents(),
       });
       // On success, status flips to 'ready' and the modal auto-unmounts.
     } catch (err) {
@@ -264,6 +268,26 @@ export function CompleteOnboardingModal() {
             <span>{errorMsg}</span>
           </div>
         )}
+
+        {/* LGPD: explicit consent (Art. 8º). The acceptance is recorded in
+            the consent_logs table via the same transaction that creates the
+            user, so the backend always has proof of who accepted what. */}
+        <label className="flex items-start gap-2 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={consentAccepted}
+            onChange={(e) => setConsentAccepted(e.target.checked)}
+            className="mt-[3px] flex-shrink-0 cursor-pointer"
+            style={{ accentColor: 'var(--kiro-green)' }}
+          />
+          <span className="text-[12px] text-[var(--fg-2)] leading-relaxed">
+            Li e aceito os{' '}
+            <span className="text-[var(--fg-1)] font-medium">Termos de Uso</span>{' '}
+            e a{' '}
+            <span className="text-[var(--fg-1)] font-medium">Política de Privacidade</span>{' '}
+            da Kiro.
+          </span>
+        </label>
 
         <Button
           type="submit"

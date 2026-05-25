@@ -16,12 +16,18 @@ export interface UserProfile {
   updated_at: string;
 }
 
+export interface ConsentAcceptance {
+  policy_type: string;
+  policy_version: string;
+}
+
 export interface CreateMeBody {
   store_name: string;
   cnpj: string;
   email: string;
   pix_key: string;
   stellar_public_key: string;
+  consents: ConsentAcceptance[];
 }
 
 export interface UpdateMeBody {
