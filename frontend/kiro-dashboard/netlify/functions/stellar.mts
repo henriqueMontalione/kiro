@@ -46,9 +46,10 @@ const server = new Horizon.Server(HORIZON_URL);
 const FEE = String(10 * parseInt(BASE_FEE)); // "1000" stroops
 
 // Module-level JWKS fetcher — caches the key set between invocations.
+// Note: Privy publishes its JWKS at /jwks.json directly, NOT under /.well-known/.
 const JWKS = PRIVY_APP_ID
   ? createRemoteJWKSet(
-      new URL(`https://auth.privy.io/api/v1/apps/${PRIVY_APP_ID}/.well-known/jwks.json`),
+      new URL(`https://auth.privy.io/api/v1/apps/${PRIVY_APP_ID}/jwks.json`),
     )
   : null;
 

@@ -7,7 +7,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { usePrivy, useWallets } from '@privy-io/react-auth';
+import { usePrivy, useWallets, useCreateWallet } from '@privy-io/react-auth';
 import { Keypair, TransactionBuilder } from '@stellar/stellar-sdk';
 import { fetchTesouroBalance, NETWORK_PASSPHRASE } from '@/lib/stellar';
 import { deriveEdSeedFromPrf, wipeBytes } from '@/lib/passkey/crypto';
@@ -38,6 +38,10 @@ const WalletContext = createContext<WalletState | null>(null);
 export function WalletProvider({ children }: { children: ReactNode }) {
   const { ready, authenticated, login, logout, getAccessToken } = usePrivy();
   const { wallets } = useWallets();
+  const { createWallet } = useCreateWallet();
+  // Tracks an in-flight manual createWallet() call so we don't fire it on
+  // every render while we wait for Privy to populate the wallet.
+  const creatingWalletRef = useRef(false);
 
   const [publicKey, setPublicKey] = useState<string | null>(null);
   const [balance, setBalance] = useState<string | null>(null);
@@ -62,6 +66,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!ready || !authenticated) {
       derivingRef.current = false; // reset gate on logout so next login can derive
+      creatingWalletRef.current = false; // allow manual createWallet() on next login
       setDerivationConfirmed(false);
       setNeedsSignatureConfirmation(false);
       return;
@@ -70,10 +75,26 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (derivingRef.current) return; // derivation already in flight
 
     const embeddedWallet = wallets.find((w) => w.walletClientType === 'privy');
-    if (!embeddedWallet) return;
+    if (!embeddedWallet) {
+      // Privy didn't auto-create the embedded wallet (can happen when MFA
+      // enrollment runs in the same flow, or when `createOnLogin` is gated).
+      // Force creation manually — this is a no-op if one already exists.
+      if (!creatingWalletRef.current) {
+        creatingWalletRef.current = true;
+        console.log('[Wallet] no embedded wallet found — forcing creation');
+        createWallet()
+          .then(() => console.log('[Wallet] createWallet() resolved'))
+          .catch((err) => {
+            console.warn('[Wallet] createWallet() failed:', err);
+            creatingWalletRef.current = false; // allow retry on next effect run
+          });
+      }
+      return;
+    }
 
     if (!derivationConfirmed) {
       // Show our explanation screen before triggering Privy's sign modal.
+      console.log('[Wallet] embedded wallet ready — prompting derivation confirmation');
       setNeedsSignatureConfirmation(true);
       return;
     }
@@ -147,13 +168,36 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   // Separate effect: whenever publicKey is resolved (or changed), load the
   // balance. Isolated from the derivation effect so that `setPublicKey` doesn't
   // cancel its own in-flight `fetchTesouroBalance` via the cleanup.
+  //
+  // Retries with backoff because a newly-derived wallet is racing against
+  // /api/stellar-activate funding the account: the first fetch usually 404s
+  // (account not yet on-chain), and without retry the UI sits in "no balance"
+  // until the user manually hits refresh.
   useEffect(() => {
     if (!publicKey) return;
     let cancelled = false;
-    fetchTesouroBalance(publicKey)
-      .then((bal) => { if (!cancelled) setBalance(bal); })
-      .catch(() => {});
-    return () => { cancelled = true; };
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const tryFetch = async (attempt: number) => {
+      const bal = await fetchTesouroBalance(publicKey).catch(() => null);
+      if (cancelled) return;
+      if (bal !== null) {
+        setBalance(bal);
+        return;
+      }
+      // 5 attempts × 2s backoff = ~30s ceiling, more than enough for friendbot
+      // or the sponsor's CreateAccount to land.
+      if (attempt < 5) {
+        timer = setTimeout(() => tryFetch(attempt + 1), 2000 * (attempt + 1));
+      }
+    };
+
+    tryFetch(0);
+
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
   }, [publicKey]);
 
   const confirmDerivation = useCallback(() => {
@@ -163,9 +207,18 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const connect = useCallback(() => {
     if (!authenticated) {
       login();
-      // useEffect above picks up once Privy fires the authenticated → true transition
+      // useEffect picks up once Privy fires the authenticated → true transition
+      return;
     }
-  }, [authenticated, login]);
+    // Already authenticated but the Stellar wallet hasn't been derived yet
+    // (e.g. page was refreshed, or user dismissed the sign modal mid-flow).
+    // Reopen the confirmation modal so the user can retry without logging out.
+    if (!publicKey) {
+      derivingRef.current = false;
+      setDerivationConfirmed(false);
+      setNeedsSignatureConfirmation(true);
+    }
+  }, [authenticated, login, publicKey]);
 
   const disconnect = useCallback(() => {
     keypairRef.current = null;

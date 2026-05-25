@@ -149,8 +149,6 @@ export default async (req: Request): Promise<Response> => {
         quoteAssets: { type: 'offramp', sourceAsset: TESOURO_ASSET, targetAsset: 'BRL' },
         sourceAmount,
       })) as Record<string, string | null>;
-      // Off-ramp: source=TESOURO, dest=BRL → rate = dest/source (BRL per TESOURO).
-      // Compute from amounts when Etherfuse omits exchangeRate (sandbox quirk).
       const destAmt = data.destinationAmountAfterFee ?? data.destinationAmount ?? '0';
       const srcN = parseFloat(data.sourceAmount ?? '0');
       const destN = parseFloat(destAmt);

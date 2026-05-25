@@ -390,9 +390,7 @@ export function SacarPixModal({ open, onClose }: SacarPixModalProps) {
     ? amountBRL.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
     : '';
 
-  // "Sacar tudo" reserves R$ 0,05 of headroom for the Etherfuse fee so the
-  // resulting tesouroEquivalent stays within the wallet's balance.
-  const SACAR_TUDO_FEE_BUFFER = 0.05;
+ const SACAR_TUDO_FEE_BUFFER = 0.05;
   const sacarTudoCents =
     maxBRL != null && maxBRL > SACAR_TUDO_FEE_BUFFER
       ? Math.floor((maxBRL - SACAR_TUDO_FEE_BUFFER) * 100)
