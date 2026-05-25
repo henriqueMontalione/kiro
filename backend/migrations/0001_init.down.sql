@@ -1,0 +1,6 @@
+DROP TABLE IF EXISTS webhook_logs;
+DROP TABLE IF EXISTS withdrawals;
+DROP TABLE IF EXISTS anticipations;
+DROP TABLE IF EXISTS sales;
+DROP INDEX IF EXISTS idx_users_privy;
+DROP TABLE IF EXISTS users;
