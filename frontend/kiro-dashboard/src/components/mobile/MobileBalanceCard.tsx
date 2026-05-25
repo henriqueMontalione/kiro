@@ -1,4 +1,4 @@
-import { Eye, EyeOff, RefreshCw, Sparkles, Wallet } from 'lucide-react';
+import { Eye, EyeOff, Loader2, RefreshCw, Sparkles, Wallet } from 'lucide-react';
 import { Card } from '../Card';
 import { Button } from '../Button';
 import { YIELD_APY_LABEL } from '@/lib/mocks';
@@ -16,7 +16,7 @@ export function MobileBalanceCard({ onReceive }: MobileBalanceCardProps) {
   const { formatTesouroAsBRL } = useQuote();
 
   const displayBalance =
-    isConnected && balance !== null ? formatTesouroAsBRL(balance) : 'R$ 0,00';
+    isConnected && balance !== null ? formatTesouroAsBRL(balance) : null;
   const isBlurred = !isConnected || valuesHidden;
 
   return (
@@ -63,21 +63,30 @@ export function MobileBalanceCard({ onReceive }: MobileBalanceCardProps) {
         )}
       </div>
 
-      <div
-        className="k-money font-medium"
-        style={{
-          fontSize: 38,
-          lineHeight: 1.1,
-          color: 'var(--kiro-green)',
-          textShadow: '0 0 24px rgba(0,255,135,0.28)',
-          letterSpacing: '-0.01em',
-          filter: isBlurred ? 'blur(12px)' : 'none',
-          transition: 'filter 200ms ease-out',
-          userSelect: isBlurred ? 'none' : 'auto',
-        }}
-      >
-        {displayBalance}
-      </div>
+      {displayBalance !== null ? (
+        <div
+          className="k-money font-medium"
+          style={{
+            fontSize: 38,
+            lineHeight: 1.1,
+            color: 'var(--kiro-green)',
+            textShadow: '0 0 24px rgba(0,255,135,0.28)',
+            letterSpacing: '-0.01em',
+            filter: isBlurred ? 'blur(12px)' : 'none',
+            transition: 'filter 200ms ease-out',
+            userSelect: isBlurred ? 'none' : 'auto',
+          }}
+        >
+          {displayBalance}
+        </div>
+      ) : (
+        <div className="flex items-center gap-2" style={{ height: 42 }}>
+          {isConnected
+            ? <Loader2 size={20} strokeWidth={1.6} className="animate-spin" style={{ color: 'var(--fg-3)' }} />
+            : <span className="k-money font-medium" style={{ fontSize: 38, lineHeight: 1.1, color: 'var(--fg-3)' }}>R$ 0,00</span>
+          }
+        </div>
+      )}
 
       <div
         className="inline-flex items-center gap-[6px] mt-3 rounded-full font-sans text-[12px] text-[var(--kiro-green)]"

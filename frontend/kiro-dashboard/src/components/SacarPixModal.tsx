@@ -578,7 +578,7 @@ export function SacarPixModal({ open, onClose }: SacarPixModalProps) {
                 />
               </div>
               <p className="text-[12px] text-[var(--fg-3)]">
-                Saldo disponível: {balance ? formatTesouroAsBRL(balance) : '—'}
+                Saldo disponível: {balance && brlPerTesouro != null ? formatTesouroAsBRL(balance) : '—'}
               </p>
               {brlPerTesouro == null && (
                 <button

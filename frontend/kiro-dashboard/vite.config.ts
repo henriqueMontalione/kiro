@@ -246,11 +246,17 @@ function etherfuseApi(env: ApiEnv): Plugin {
               quoteAssets: { type: 'offramp', sourceAsset: env.tesouroAsset, targetAsset: 'BRL' },
               sourceAmount,
             }) as Record<string, string | null>;
+            // Off-ramp: source=TESOURO, dest=BRL → rate = dest/source (BRL per TESOURO).
+            // Compute from amounts when Etherfuse omits exchangeRate (sandbox quirk).
+            const destAmt = data.destinationAmountAfterFee ?? data.destinationAmount ?? '0';
+            const srcN = parseFloat(data.sourceAmount ?? '0');
+            const destN = parseFloat(destAmt);
+            const computedRate = srcN > 0 ? destN / srcN : 0;
             return sendJson(res, {
               quoteId: data.quoteId,
               sourceAmount: data.sourceAmount,
-              destinationAmount: data.destinationAmountAfterFee ?? data.destinationAmount ?? '0',
-              exchangeRate: data.exchangeRate ?? '1',
+              destinationAmount: destAmt,
+              exchangeRate: data.exchangeRate ?? String(computedRate),
               fee: data.feeAmount ?? '0',
               expiresAt: data.expiresAt ?? '',
             });
@@ -294,11 +300,16 @@ function etherfuseApi(env: ApiEnv): Plugin {
             };
             if (walletAddress) body.walletAddress = walletAddress;
             const data = await efetch(env, 'POST', '/ramp/quote', body) as Record<string, string | null>;
+            // On-ramp: source=BRL, dest=TESOURO → rate (BRL per TESOURO) = source/dest.
+            const destAmt = data.destinationAmountAfterFee ?? data.destinationAmount ?? '0';
+            const srcN = parseFloat(data.sourceAmount ?? '0');
+            const destN = parseFloat(destAmt);
+            const computedRate = destN > 0 ? srcN / destN : 0;
             return sendJson(res, {
               quoteId: data.quoteId,
               sourceAmount: data.sourceAmount,
-              destinationAmount: data.destinationAmountAfterFee ?? data.destinationAmount ?? '0',
-              exchangeRate: data.exchangeRate ?? '1',
+              destinationAmount: destAmt,
+              exchangeRate: data.exchangeRate ?? String(computedRate),
               fee: data.feeAmount ?? '0',
               expiresAt: data.expiresAt ?? '',
             });

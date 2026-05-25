@@ -149,11 +149,17 @@ export default async (req: Request): Promise<Response> => {
         quoteAssets: { type: 'offramp', sourceAsset: TESOURO_ASSET, targetAsset: 'BRL' },
         sourceAmount,
       })) as Record<string, string | null>;
+      // Off-ramp: source=TESOURO, dest=BRL → rate = dest/source (BRL per TESOURO).
+      // Compute from amounts when Etherfuse omits exchangeRate (sandbox quirk).
+      const destAmt = data.destinationAmountAfterFee ?? data.destinationAmount ?? '0';
+      const srcN = parseFloat(data.sourceAmount ?? '0');
+      const destN = parseFloat(destAmt);
+      const computedRate = srcN > 0 ? destN / srcN : 0;
       return json({
         quoteId: data.quoteId,
         sourceAmount: data.sourceAmount,
-        destinationAmount: data.destinationAmountAfterFee ?? data.destinationAmount ?? '0',
-        exchangeRate: data.exchangeRate ?? '1',
+        destinationAmount: destAmt,
+        exchangeRate: data.exchangeRate ?? String(computedRate),
         fee: data.feeAmount ?? '0',
         expiresAt: data.expiresAt ?? '',
       });
@@ -196,11 +202,16 @@ export default async (req: Request): Promise<Response> => {
       };
       if (walletAddress) body.walletAddress = walletAddress;
       const data = (await efetch('POST', '/ramp/quote', body)) as Record<string, string | null>;
+      // On-ramp: source=BRL, dest=TESOURO → rate (BRL per TESOURO) = source/dest.
+      const destAmt = data.destinationAmountAfterFee ?? data.destinationAmount ?? '0';
+      const srcN = parseFloat(data.sourceAmount ?? '0');
+      const destN = parseFloat(destAmt);
+      const computedRate = destN > 0 ? srcN / destN : 0;
       return json({
         quoteId: data.quoteId,
         sourceAmount: data.sourceAmount,
-        destinationAmount: data.destinationAmountAfterFee ?? data.destinationAmount ?? '0',
-        exchangeRate: data.exchangeRate ?? '1',
+        destinationAmount: destAmt,
+        exchangeRate: data.exchangeRate ?? String(computedRate),
         fee: data.feeAmount ?? '0',
         expiresAt: data.expiresAt ?? '',
       });
