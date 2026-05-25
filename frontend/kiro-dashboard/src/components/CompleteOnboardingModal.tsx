@@ -1,0 +1,318 @@
+import { useEffect, useState, type FormEvent } from 'react';
+import { Loader2, Store, AlertCircle } from 'lucide-react';
+import { Button } from './Button';
+import { useUserProfile } from '@/context/UserProfileContext';
+
+type PixKeyType = 'cpf' | 'cnpj' | 'email' | 'phone';
+
+const PIX_LABELS: Record<PixKeyType, string> = {
+  cpf: 'CPF',
+  cnpj: 'CNPJ',
+  email: 'E-mail',
+  phone: 'Telefone',
+};
+
+const PIX_PLACEHOLDERS: Record<PixKeyType, string> = {
+  cpf: '000.000.000-00',
+  cnpj: '00.000.000/0000-00',
+  email: 'voce@exemplo.com',
+  phone: '(11) 91234-5678',
+};
+
+/** Strips a string to digits only. */
+function digitsOnly(s: string): string {
+  return s.replace(/\D/g, '');
+}
+
+/** 99.999.999/9999-99 */
+function formatCnpj(d: string): string {
+  const x = d.slice(0, 14);
+  if (x.length <= 2) return x;
+  if (x.length <= 5) return `${x.slice(0, 2)}.${x.slice(2)}`;
+  if (x.length <= 8) return `${x.slice(0, 2)}.${x.slice(2, 5)}.${x.slice(5)}`;
+  if (x.length <= 12) return `${x.slice(0, 2)}.${x.slice(2, 5)}.${x.slice(5, 8)}/${x.slice(8)}`;
+  return `${x.slice(0, 2)}.${x.slice(2, 5)}.${x.slice(5, 8)}/${x.slice(8, 12)}-${x.slice(12)}`;
+}
+
+/** 999.999.999-99 */
+function formatCpf(d: string): string {
+  const x = d.slice(0, 11);
+  if (x.length <= 3) return x;
+  if (x.length <= 6) return `${x.slice(0, 3)}.${x.slice(3)}`;
+  if (x.length <= 9) return `${x.slice(0, 3)}.${x.slice(3, 6)}.${x.slice(6)}`;
+  return `${x.slice(0, 3)}.${x.slice(3, 6)}.${x.slice(6, 9)}-${x.slice(9)}`;
+}
+
+/** (XX) 9XXXX-XXXX  — only formats 11-digit Brazilian cell numbers. */
+function formatPhone(d: string): string {
+  const x = d.slice(0, 11);
+  if (x.length <= 2) return x.length ? `(${x}` : '';
+  if (x.length <= 7) return `(${x.slice(0, 2)}) ${x.slice(2)}`;
+  return `(${x.slice(0, 2)}) ${x.slice(2, 7)}-${x.slice(7)}`;
+}
+
+const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+
+/** Converts the form's PIX value to the canonical format expected by the backend. */
+function normalizePixKey(type: PixKeyType, raw: string): string {
+  switch (type) {
+    case 'cpf':
+    case 'cnpj':
+      return digitsOnly(raw);
+    case 'email':
+      return raw.trim().toLowerCase();
+    case 'phone':
+      return `+55${digitsOnly(raw)}`;
+  }
+}
+
+/** Returns an error message or empty string if the PIX value is valid for the type. */
+function validatePixKey(type: PixKeyType, raw: string): string {
+  switch (type) {
+    case 'cpf':
+      return digitsOnly(raw).length === 11 ? '' : 'CPF deve ter 11 dígitos';
+    case 'cnpj':
+      return digitsOnly(raw).length === 14 ? '' : 'CNPJ deve ter 14 dígitos';
+    case 'email':
+      return EMAIL_RE.test(raw.trim()) ? '' : 'E-mail inválido';
+    case 'phone':
+      return digitsOnly(raw).length === 11
+        ? ''
+        : 'Telefone deve ter DDD + 9 dígitos';
+  }
+}
+
+/**
+ * Full-screen blocking modal shown when the lojista is authenticated but
+ * hasn't completed their cadastro in the backend yet (GET /api/me → 404).
+ *
+ * On submit, POSTs to /api/me; on success, UserProfileContext flips status
+ * to 'ready' and the modal unmounts.
+ */
+export function CompleteOnboardingModal() {
+  const { status, email: privyEmail, completeOnboarding } = useUserProfile();
+
+  const [storeName, setStoreName] = useState('');
+  const [cnpj, setCnpj] = useState('');
+  const [email, setEmail] = useState('');
+  const [pixType, setPixType] = useState<PixKeyType>('cpf');
+  const [pixValue, setPixValue] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Pre-fill the email from Privy once available.
+  useEffect(() => {
+    if (privyEmail && !email) setEmail(privyEmail);
+  }, [privyEmail, email]);
+
+  // Reset the PIX field when type changes — a CPF can't survive a swap to email.
+  useEffect(() => {
+    setPixValue('');
+  }, [pixType]);
+
+  if (status !== 'needs_onboarding') return null;
+
+  const cnpjValid = digitsOnly(cnpj).length === 14;
+  const emailValid = EMAIL_RE.test(email.trim());
+  const pixError = pixValue ? validatePixKey(pixType, pixValue) : 'Campo obrigatório';
+  const formValid =
+    storeName.trim().length > 0 &&
+    cnpjValid &&
+    emailValid &&
+    pixError === '';
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    if (!formValid || submitting) return;
+    setSubmitting(true);
+    setErrorMsg(null);
+    try {
+      await completeOnboarding({
+        store_name: storeName.trim(),
+        cnpj: digitsOnly(cnpj),
+        email: email.trim().toLowerCase(),
+        pix_key: normalizePixKey(pixType, pixValue),
+      });
+      // On success, status flips to 'ready' and the modal auto-unmounts.
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Erro ao salvar cadastro');
+      setSubmitting(false);
+    }
+  }
+
+  function handlePixChange(v: string) {
+    if (pixType === 'cpf') setPixValue(formatCpf(digitsOnly(v)));
+    else if (pixType === 'cnpj') setPixValue(formatCnpj(digitsOnly(v)));
+    else if (pixType === 'phone') setPixValue(formatPhone(digitsOnly(v)));
+    else setPixValue(v);
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-[110] flex items-center justify-center p-4 overflow-y-auto"
+      style={{ background: 'rgba(0,0,0,0.78)', backdropFilter: 'blur(8px)' }}
+    >
+      <form
+        onSubmit={handleSubmit}
+        className="w-full max-w-[460px] rounded-[var(--radius-xl)] border border-[var(--stroke-2)] flex flex-col gap-5"
+        style={{
+          padding: '28px 28px 24px',
+          background: 'rgba(20, 22, 32, 0.98)',
+          backdropFilter: 'blur(24px) saturate(140%)',
+          boxShadow: 'var(--shadow-3)',
+        }}
+      >
+        <div className="flex flex-col items-center gap-3 text-center">
+          <div
+            className="flex items-center justify-center rounded-full"
+            style={{
+              width: 56,
+              height: 56,
+              background: 'rgba(0,255,135,0.08)',
+              border: '1px solid rgba(0,255,135,0.20)',
+            }}
+          >
+            <Store size={24} strokeWidth={1.5} style={{ color: 'var(--kiro-green)' }} />
+          </div>
+          <div>
+            <h2 className="text-[18px] font-semibold text-[var(--fg-1)]">Complete seu cadastro</h2>
+            <p className="text-[13px] text-[var(--fg-2)] leading-relaxed mt-1">
+              Precisamos de algumas informações pra ativar sua conta.
+            </p>
+          </div>
+        </div>
+
+        <Field label="Nome da loja">
+          <input
+            type="text"
+            value={storeName}
+            onChange={(e) => setStoreName(e.target.value)}
+            placeholder="Ex: Padaria do João"
+            maxLength={255}
+            className="bg-transparent border-none outline-none w-full text-[14px] text-[var(--fg-1)]"
+            autoFocus
+          />
+        </Field>
+
+        <Field label="CNPJ" error={cnpj && !cnpjValid ? 'CNPJ deve ter 14 dígitos' : undefined}>
+          <input
+            type="text"
+            inputMode="numeric"
+            value={cnpj}
+            onChange={(e) => setCnpj(formatCnpj(digitsOnly(e.target.value)))}
+            placeholder="00.000.000/0000-00"
+            className="bg-transparent border-none outline-none w-full text-[14px] text-[var(--fg-1)]"
+          />
+        </Field>
+
+        <Field label="E-mail" error={email && !emailValid ? 'E-mail inválido' : undefined}>
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="voce@exemplo.com"
+            className="bg-transparent border-none outline-none w-full text-[14px] text-[var(--fg-1)]"
+          />
+        </Field>
+
+        <div className="flex flex-col gap-2">
+          <label className="text-[11px] text-[var(--fg-3)] font-medium uppercase tracking-wide">
+            Chave PIX
+          </label>
+          <div className="grid grid-cols-4 gap-1.5">
+            {(Object.keys(PIX_LABELS) as PixKeyType[]).map((t) => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => setPixType(t)}
+                className="text-[12px] rounded-[var(--radius-md)] border transition-colors"
+                style={{
+                  padding: '8px 6px',
+                  borderColor: pixType === t ? 'var(--kiro-green)' : 'var(--stroke-3)',
+                  background: pixType === t ? 'rgba(0,255,135,0.10)' : 'transparent',
+                  color: pixType === t ? 'var(--kiro-green)' : 'var(--fg-2)',
+                  cursor: 'pointer',
+                }}
+              >
+                {PIX_LABELS[t]}
+              </button>
+            ))}
+          </div>
+          <Field error={pixValue && pixError ? pixError : undefined}>
+            <input
+              type={pixType === 'email' ? 'email' : 'text'}
+              inputMode={pixType === 'email' ? 'text' : 'numeric'}
+              value={pixValue}
+              onChange={(e) => handlePixChange(e.target.value)}
+              placeholder={PIX_PLACEHOLDERS[pixType]}
+              className="bg-transparent border-none outline-none w-full text-[14px] text-[var(--fg-1)]"
+            />
+          </Field>
+        </div>
+
+        {errorMsg && (
+          <div
+            className="flex items-start gap-2 rounded-[var(--radius-md)] text-[12px]"
+            style={{
+              padding: '10px 12px',
+              background: 'rgba(255,77,109,0.08)',
+              border: '1px solid rgba(255,77,109,0.25)',
+              color: '#FF8FA3',
+            }}
+          >
+            <AlertCircle size={14} strokeWidth={1.8} className="flex-shrink-0 mt-[1px]" />
+            <span>{errorMsg}</span>
+          </div>
+        )}
+
+        <Button
+          type="submit"
+          variant="primary"
+          size="lg"
+          disabled={!formValid || submitting}
+          className="w-full justify-center"
+        >
+          {submitting ? (
+            <>
+              <Loader2 size={16} strokeWidth={1.8} className="animate-spin" />
+              Salvando...
+            </>
+          ) : (
+            'Finalizar cadastro'
+          )}
+        </Button>
+      </form>
+    </div>
+  );
+}
+
+function Field({
+  label,
+  error,
+  children,
+}: {
+  label?: string;
+  error?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      {label && (
+        <label className="text-[11px] text-[var(--fg-3)] font-medium uppercase tracking-wide">
+          {label}
+        </label>
+      )}
+      <div
+        className="flex items-center rounded-[var(--radius-md)] border"
+        style={{
+          padding: '12px 14px',
+          borderColor: error ? '#FF4D6D55' : 'var(--stroke-3)',
+          background: 'var(--bg-3)',
+        }}
+      >
+        {children}
+      </div>
+      {error && <p className="text-[11px]" style={{ color: '#FF8FA3' }}>{error}</p>}
+    </div>
+  );
+}
