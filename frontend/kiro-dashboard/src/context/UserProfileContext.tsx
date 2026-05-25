@@ -1,19 +1,57 @@
-import { createContext, useCallback, useContext, useState, type ReactNode } from 'react';
-import { MERCHANT } from '@/lib/mocks';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useState,
+  type ReactNode,
+} from 'react';
+import { usePrivy } from '@privy-io/react-auth';
+import { useWallet } from './WalletContext';
+import {
+  getMe,
+  createMe,
+  updateMe,
+  type UserProfile,
+  type CreateMeBody,
+} from '@/lib/api/me';
 
-const NAME_KEY = 'kiro_profile_name';
 const PHOTO_KEY = 'kiro_profile_photo';
 
+/**
+ * Status state machine for the lojista profile lifecycle:
+ *
+ *   idle             → before wallet is connected; nothing to fetch yet
+ *   loading          → GET /api/me in flight
+ *   needs_onboarding → backend returned 404; UI must collect cadastro data
+ *   ready            → profile loaded; dashboard can render real data
+ *   error            → backend unreachable / token rejected
+ */
+export type ProfileStatus = 'idle' | 'loading' | 'needs_onboarding' | 'ready' | 'error';
+
 interface UserProfileState {
+  status: ProfileStatus;
+  profile: UserProfile | null;
+  errorMessage: string | null;
+
+  /** Display name = store_name when ready, empty string otherwise. */
   name: string;
   email: string;
+  /** Hardcoded for now — single-role app. Kept as a hook output so consumers
+   *  don't need to change when we eventually add roles to the backend. */
   role: string;
-  /** Auto-derived from the current name (first + last word). */
+  /** Two-letter initials derived from name; "?" when unavailable. */
   initials: string;
-  /** Data URL or null. Backed by localStorage. */
+  /** Data URL or null. Local-only — photo upload to backend not implemented yet. */
   photoUrl: string | null;
-  setName: (name: string) => void;
+
   setPhotoUrl: (url: string | null) => void;
+  /** PATCH /api/me with a new store_name. Updates the local profile on success. */
+  setName: (name: string) => Promise<void>;
+  /** Submits the cadastro form on first login. Promotes status → 'ready' on success. */
+  completeOnboarding: (body: Omit<CreateMeBody, 'stellar_public_key'>) => Promise<void>;
+  /** Re-fetches the profile from the backend. */
+  refresh: () => Promise<void>;
 }
 
 function deriveInitials(name: string): string {
@@ -25,26 +63,67 @@ function deriveInitials(name: string): string {
 
 const UserProfileContext = createContext<UserProfileState | null>(null);
 
-/**
- * Holds the merchant's display profile (name + avatar) globally.
- *
- * No backend yet — values persist in localStorage so the dashboard remembers
- * them across reloads. `MERCHANT` from mocks is the source of truth for fields
- * the user can't edit (email, role) and the default for the editable ones.
- */
 export function UserProfileProvider({ children }: { children: ReactNode }) {
-  const [name, setNameState] = useState<string>(
-    () => localStorage.getItem(NAME_KEY) ?? MERCHANT.name,
-  );
+  const { getAccessToken, user } = usePrivy();
+  const { isConnected, publicKey } = useWallet();
+
+  const [status, setStatus] = useState<ProfileStatus>('idle');
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [photoUrl, setPhotoUrlState] = useState<string | null>(
     () => localStorage.getItem(PHOTO_KEY),
   );
 
-  const setName = useCallback((next: string) => {
-    setNameState(next);
-    if (next === MERCHANT.name) localStorage.removeItem(NAME_KEY);
-    else localStorage.setItem(NAME_KEY, next);
-  }, []);
+  const fetchProfile = useCallback(async () => {
+    setStatus('loading');
+    setErrorMessage(null);
+    try {
+      const token = await getAccessToken();
+      if (!token) {
+        setStatus('error');
+        setErrorMessage('Sessão expirada. Faça login novamente.');
+        return;
+      }
+      const p = await getMe(token);
+      if (p === null) {
+        setProfile(null);
+        setStatus('needs_onboarding');
+      } else {
+        setProfile(p);
+        setStatus('ready');
+      }
+    } catch (err) {
+      setStatus('error');
+      setErrorMessage(err instanceof Error ? err.message : 'Erro ao carregar perfil');
+    }
+  }, [getAccessToken]);
+
+  // Fetch the profile once the wallet is connected. Earlier than that we don't
+  // have a Stellar pubkey to anchor the cadastro to, and Privy might still be
+  // setting up MFA / embedded wallet — better to wait for the full handshake.
+  useEffect(() => {
+    if (!isConnected) {
+      setStatus('idle');
+      setProfile(null);
+      setErrorMessage(null);
+      return;
+    }
+    fetchProfile();
+  }, [isConnected, fetchProfile]);
+
+  const completeOnboarding = useCallback(
+    async (body: Omit<CreateMeBody, 'stellar_public_key'>) => {
+      if (!publicKey) throw new Error('Carteira não conectada');
+      const token = await getAccessToken();
+      if (!token) throw new Error('Sessão expirada. Faça login novamente.');
+
+      const created = await createMe(token, { ...body, stellar_public_key: publicKey });
+      setProfile(created);
+      setStatus('ready');
+      setErrorMessage(null);
+    },
+    [publicKey, getAccessToken],
+  );
 
   const setPhotoUrl = useCallback((url: string | null) => {
     setPhotoUrlState(url);
@@ -52,16 +131,39 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
     else localStorage.removeItem(PHOTO_KEY);
   }, []);
 
+  const setName = useCallback(
+    async (next: string) => {
+      const trimmed = next.trim();
+      if (!trimmed) throw new Error('Nome inválido');
+      const token = await getAccessToken();
+      if (!token) throw new Error('Sessão expirada. Faça login novamente.');
+      const updated = await updateMe(token, { store_name: trimmed });
+      setProfile(updated);
+    },
+    [getAccessToken],
+  );
+
+  // Derived display fields. When the profile isn't loaded yet, we fall back to
+  // the Privy email so the dashboard doesn't render with empty placeholders.
+  const name = profile?.store_name ?? '';
+  const email = profile?.email ?? user?.email?.address ?? '';
+  const initials = profile ? deriveInitials(profile.store_name) : '?';
+
   return (
     <UserProfileContext.Provider
       value={{
+        status,
+        profile,
+        errorMessage,
         name,
-        email: MERCHANT.email,
-        role: MERCHANT.role,
-        initials: deriveInitials(name),
+        email,
+        role: 'Merchant',
+        initials,
         photoUrl,
-        setName,
         setPhotoUrl,
+        setName,
+        completeOnboarding,
+        refresh: fetchProfile,
       }}
     >
       {children}

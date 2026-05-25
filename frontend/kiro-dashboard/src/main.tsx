@@ -34,8 +34,8 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     >
       <MfaGuard />
       <BrowserRouter>
-        <UserProfileProvider>
-          <WalletProvider>
+        <WalletProvider>
+          <UserProfileProvider>
             <DashboardProvider>
               <QuoteProvider>
                 <NotificationsProvider>
@@ -43,8 +43,8 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
                 </NotificationsProvider>
               </QuoteProvider>
             </DashboardProvider>
-          </WalletProvider>
-        </UserProfileProvider>
+          </UserProfileProvider>
+        </WalletProvider>
       </BrowserRouter>
     </PrivyProvider>
   </>,
