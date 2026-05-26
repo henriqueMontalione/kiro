@@ -13,6 +13,7 @@ import {
   getOnRampOrder,
   regenerateClaimXdr,
   sandboxApprove,
+  simulateOnRampPayment,
   type OnRampQuoteResult,
   type OnRampOrderResult,
 } from '@/lib/anchors/etherfuse/client';
@@ -305,6 +306,12 @@ export function ReceberPixModal({ open, onClose }: ReceberPixModalProps) {
       setOrder(o);
       setStep('pix');
       startOrderPolling(o.orderId);
+
+      if (SANDBOX_ENABLED) {
+        simulateOnRampPayment(o.orderId).catch((err) => {
+          console.warn('[ReceberPixModal] simulateOnRampPayment failed:', err);
+        });
+      }
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : 'Erro ao criar ordem');
       setStep('error');

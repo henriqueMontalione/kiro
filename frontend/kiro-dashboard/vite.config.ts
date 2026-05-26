@@ -413,6 +413,20 @@ function etherfuseApi(env: ApiEnv): Plugin {
             return sendJson(res, { ok: true, data: { status: kycStatus } });
           }
 
+          // POST /api/ef-onramp-simulate-payment — sandbox-only shortcut that
+          // tells Etherfuse to flip the order to "paid" without an actual PIX
+          // having been sent. Hits /ramp/order/fiat_received. Gated server-side
+          // on the base URL containing "sand" so this is a 403 in production
+          // regardless of any client-side flag.
+          if (parsed.pathname === '/api/ef-onramp-simulate-payment' && method === 'POST') {
+            if (!env.baseUrl.includes('sand')) {
+              return sendJson(res, { error: 'Simulação de PIX indisponível fora do sandbox' }, 403);
+            }
+            const { orderId } = JSON.parse(await readBody(req)) as { orderId: string };
+            await efetch(env, 'POST', '/ramp/order/fiat_received', { orderId });
+            return sendJson(res, { ok: true });
+          }
+
           // GET /api/ef-onramp-order?orderId=... — poll for completion.
           // POST /api/ef-onramp-claim-tx — proxies to /ramp/order/{id}/regenerate_tx,
           // which returns a fresh Stellar claim XDR for completed on-ramp orders.

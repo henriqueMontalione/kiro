@@ -298,6 +298,19 @@ export default async (req: Request): Promise<Response> => {
       return json({ ok: true, data: { status: kycStatus } });
     }
 
+    // POST /api/ef-onramp-simulate-payment — sandbox-only shortcut that flips
+    // an on-ramp order to "paid" via /ramp/order/fiat_received without an
+    // actual PIX. Gated server-side on the base URL containing "sand" so it
+    // returns 403 in production regardless of any client-side flag.
+    if (url.pathname === '/api/ef-onramp-simulate-payment' && method === 'POST') {
+      if (!BASE_URL.includes('sand')) {
+        return json({ error: 'Simulação de PIX indisponível fora do sandbox' }, 403);
+      }
+      const { orderId } = (await req.json()) as { orderId: string };
+      await efetch('POST', '/ramp/order/fiat_received', { orderId });
+      return json({ ok: true });
+    }
+
     // POST /api/ef-onramp-claim-tx — fresh claim XDR via regenerate_tx.
     if (url.pathname === '/api/ef-onramp-claim-tx' && method === 'POST') {
       const { orderId } = (await req.json()) as { orderId: string };
@@ -343,6 +356,7 @@ export const config = {
     '/api/ef-onramp-quote',
     '/api/ef-onramp-order',
     '/api/ef-onramp-claim-tx',
+    '/api/ef-onramp-simulate-payment',
     '/api/ef-sandbox-approve',
   ],
 };

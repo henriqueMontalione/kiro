@@ -248,6 +248,15 @@ export async function getOnRampOrder(orderId: string): Promise<OnRampPollResult>
 }
 
 /**
+ * Sandbox-only: tells Etherfuse to flip an on-ramp order to "paid" without
+ * an actual PIX. Server returns 403 in production (gate is on the base URL).
+ * UI should only surface the trigger when `VITE_ETHERFUSE_SANDBOX === 'true'`.
+ */
+export async function simulateOnRampPayment(orderId: string): Promise<void> {
+  await apiFetch<{ ok: boolean }>('POST', '/ef-onramp-simulate-payment', { orderId });
+}
+
+/**
  * Asks Etherfuse to rebuild and return a fresh Stellar claim XDR for a
  * completed on-ramp order. Use as a fallback when the order GET response
  * comes back with `stellarClaimTransaction: null` even though the order
