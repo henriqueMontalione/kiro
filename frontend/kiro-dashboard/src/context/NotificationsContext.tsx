@@ -2,11 +2,13 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
   type ReactNode,
 } from 'react';
 import { useTransactions } from './TransactionsContext';
+import { useWallet } from './WalletContext';
 import type { WalletPayment } from '@/lib/stellar';
 
 const SEEN_KEY = 'kiro_notifications_last_seen';
@@ -34,9 +36,16 @@ function buildTitle(p: WalletPayment): string {
 
 export function NotificationsProvider({ children }: { children: ReactNode }) {
   const { payments } = useTransactions();
+  const { isConnected } = useWallet();
   const [lastSeen, setLastSeen] = useState<string>(
     () => localStorage.getItem(SEEN_KEY) ?? '',
   );
+
+  useEffect(() => {
+    if (isConnected) return;
+    setLastSeen('');
+    localStorage.removeItem(SEEN_KEY);
+  }, [isConnected]);
 
   const notifications = useMemo<Notification[]>(
     () =>

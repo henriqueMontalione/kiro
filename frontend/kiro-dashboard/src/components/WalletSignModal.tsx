@@ -1,13 +1,51 @@
+import { useEffect, useState } from 'react';
+import { usePrivy } from '@privy-io/react-auth';
 import { ShieldCheck } from 'lucide-react';
 import { Button } from './Button';
 import { useWallet } from '@/context/WalletContext';
+import { getMe } from '@/lib/api/me';
 
 export function WalletSignModal() {
-  const { needsSignatureConfirmation, confirmDerivation } = useWallet();
+  const { needsSignatureConfirmation, confirmDerivation, disconnect } = useWallet();
+  const { getAccessToken } = usePrivy();
+  const [loggingOut, setLoggingOut] = useState(false);
+  const [isReturning, setIsReturning] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    if (!needsSignatureConfirmation) {
+      setIsReturning(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const token = await getAccessToken();
+        if (!token) {
+          if (!cancelled) setIsReturning(null);
+          return;
+        }
+        const profile = await getMe(token);
+        if (!cancelled) setIsReturning(profile !== null);
+      } catch {
+        if (!cancelled) setIsReturning(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [needsSignatureConfirmation, getAccessToken]);
 
   if (!needsSignatureConfirmation) return null;
 
-  const isReturning = !!localStorage.getItem('kiro_stellar_pk');
+  async function handleLogout() {
+    if (loggingOut) return;
+    setLoggingOut(true);
+    try {
+      await disconnect();
+    } finally {
+      setLoggingOut(false);
+    }
+  }
 
   return (
     <div
@@ -37,12 +75,12 @@ export function WalletSignModal() {
 
         <div className="flex flex-col gap-2">
           <h2 className="text-[18px] font-semibold text-[var(--fg-1)]">
-            {isReturning ? 'Bem-vindo de volta' : 'Ativar sua conta'}
+            {isReturning === false ? 'Ativar sua conta' : 'Bem-vindo de volta'}
           </h2>
           <p className="text-[13px] text-[var(--fg-2)] leading-relaxed">
-            {isReturning
-              ? 'Para confirmar que é você, precisamos de uma verificação rápida.'
-              : 'Para começar a usar o Kiro, precisamos de uma confirmação rápida.'}
+            {isReturning === false
+              ? 'Para começar a usar o Kiro, precisamos de uma confirmação rápida.'
+              : 'Para confirmar que é você, precisamos de uma verificação rápida.'}
             {' '}É gratuito e não gera nenhuma cobrança.
           </p>
           <p className="text-[12px]" style={{ color: 'var(--fg-3)' }}>
@@ -56,12 +94,22 @@ export function WalletSignModal() {
           onClick={confirmDerivation}
           className="w-full justify-center"
         >
-          {isReturning ? 'Continuar' : 'Ativar conta'}
+          {isReturning === false ? 'Ativar conta' : 'Continuar'}
         </Button>
 
         <p className="text-[11px] text-[var(--fg-3)]">
           Verificação necessária apenas uma vez por sessão.
         </p>
+
+        <button
+          type="button"
+          onClick={handleLogout}
+          disabled={loggingOut}
+          className="bg-transparent border-none cursor-pointer text-[12px] text-[var(--fg-3)] hover:text-[var(--fg-1)] transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+          style={{ padding: '4px 8px' }}
+        >
+          {loggingOut ? 'Saindo...' : 'Sair e entrar com outra conta'}
+        </button>
       </div>
     </div>
   );

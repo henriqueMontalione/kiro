@@ -111,6 +111,8 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
       setStatus('idle');
       setProfile(null);
       setErrorMessage(null);
+      setPhotoUrlState(null);
+      localStorage.removeItem(PHOTO_KEY);
       return;
     }
     fetchProfile();

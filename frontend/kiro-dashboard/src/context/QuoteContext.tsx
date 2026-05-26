@@ -94,7 +94,11 @@ export function QuoteProvider({ children }: { children: ReactNode }) {
   // hit /api/ef-quote (and start the poll) before the user even logs in
   // — wasting a request and leaking the leftover customerId to the proxy.
   useEffect(() => {
-    if (!isConnected) return;
+    if (!isConnected) {
+      localStorage.removeItem(CUSTOMER_KEY);
+      localStorage.removeItem(BANK_ACCOUNT_KEY);
+      return;
+    }
     fetchRate();
     const id = setInterval(fetchRate, POLL_MS);
     return () => clearInterval(id);

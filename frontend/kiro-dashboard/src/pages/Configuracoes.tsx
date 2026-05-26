@@ -1,8 +1,9 @@
 import { useRef, useState, type ChangeEvent, type ReactNode } from 'react';
-import { Camera, Check, Mail, Trash2, User } from 'lucide-react';
+import { Camera, Check, LogOut, Mail, Trash2, User } from 'lucide-react';
 import { Button } from '@/components/Button';
 import { Card, CardEyebrow } from '@/components/Card';
 import { useUserProfile } from '@/context/UserProfileContext';
+import { useWallet } from '@/context/WalletContext';
 import { truncateKey } from '@/lib/stellar';
 import { StatusTag } from '@/components/StatusTag';
 
@@ -14,13 +15,29 @@ const MAX_PHOTO_BYTES = 1 * 1024 * 1024;
  */
 export default function Configuracoes() {
   const profile = useUserProfile();
+  const { disconnect } = useWallet();
 
   const [name, setName] = useState(profile.name);
   const [photoPreview, setPhotoPreview] = useState<string | null>(profile.photoUrl);
   const [photoError, setPhotoError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  async function handleLogout() {
+    if (loggingOut) return;
+    const ok = window.confirm(
+      'Tem certeza que deseja sair? Você precisará autenticar novamente na próxima vez.',
+    );
+    if (!ok) return;
+    setLoggingOut(true);
+    try {
+      await disconnect();
+    } finally {
+      setLoggingOut(false);
+    }
+  }
 
   const trimmed = name.trim();
   const dirty = trimmed !== profile.name || photoPreview !== profile.photoUrl;
@@ -211,6 +228,34 @@ export default function Configuracoes() {
               {saving ? 'Salvando...' : 'Salvar alterações'}
             </Button>
           </div>
+        </div>
+      </Card>
+
+      <Card>
+        <CardEyebrow>Sessão</CardEyebrow>
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <div className="flex flex-col gap-[2px] min-w-0">
+            <span className="text-[14px] text-[var(--fg-1)] font-medium">
+              Sair da conta
+            </span>
+            <span className="text-[12px] text-[var(--fg-3)]">
+              Encerra esta sessão e permite entrar com outra conta.
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={handleLogout}
+            disabled={loggingOut}
+            className="inline-flex items-center gap-2 rounded-full border bg-transparent cursor-pointer transition-colors font-sans text-[13px] disabled:opacity-60 disabled:cursor-not-allowed"
+            style={{
+              padding: '8px 16px',
+              borderColor: 'rgba(255,77,109,0.4)',
+              color: '#FF4D6D',
+            }}
+          >
+            <LogOut size={14} strokeWidth={1.8} />
+            {loggingOut ? 'Saindo...' : 'Sair'}
+          </button>
         </div>
       </Card>
     </div>

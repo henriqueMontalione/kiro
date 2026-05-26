@@ -25,7 +25,7 @@ interface WalletState {
   /** True while waiting for the user to confirm the one-time wallet setup screen. */
   needsSignatureConfirmation: boolean;
   connect: () => void;
-  disconnect: () => void;
+  disconnect: () => Promise<void>;
   /** Called by the wallet setup modal — dismisses our screen and starts the Privy sign flow. */
   confirmDerivation: () => void;
   /** Signs an XDR transaction envelope with the derived Stellar keypair. */
@@ -226,11 +226,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   }, [authenticated, login, publicKey]);
 
-  const disconnect = useCallback(() => {
+  const disconnect = useCallback(async () => {
     keypairRef.current = null;
     setPublicKey(null);
     setBalance(null);
-    logout();
+    localStorage.removeItem('kiro_stellar_pk');
+    await logout();
   }, [logout]);
 
   const signTransaction = useCallback(async (xdr: string): Promise<string> => {

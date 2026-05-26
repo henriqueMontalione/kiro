@@ -2,7 +2,35 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { Loader2, Store, AlertCircle, RefreshCw } from 'lucide-react';
 import { Button } from './Button';
 import { useUserProfile } from '@/context/UserProfileContext';
+import { useWallet } from '@/context/WalletContext';
 import { currentRequiredConsents } from '@/lib/legal';
+
+function LogoutLink() {
+  const { disconnect } = useWallet();
+  const [loggingOut, setLoggingOut] = useState(false);
+
+  async function handleClick() {
+    if (loggingOut) return;
+    setLoggingOut(true);
+    try {
+      await disconnect();
+    } finally {
+      setLoggingOut(false);
+    }
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={handleClick}
+      disabled={loggingOut}
+      className="bg-transparent border-none cursor-pointer text-[12px] text-[var(--fg-3)] hover:text-[var(--fg-1)] transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+      style={{ padding: '4px 8px' }}
+    >
+      {loggingOut ? 'Saindo...' : 'Sair e entrar com outra conta'}
+    </button>
+  );
+}
 
 type PixKeyType = 'cpf' | 'cnpj' | 'email' | 'phone';
 
@@ -186,6 +214,7 @@ export function CompleteOnboardingModal() {
               </>
             )}
           </Button>
+          <LogoutLink />
         </div>
       </div>
     );
@@ -384,6 +413,10 @@ export function CompleteOnboardingModal() {
             'Finalizar cadastro'
           )}
         </Button>
+
+        <div className="flex justify-center">
+          <LogoutLink />
+        </div>
       </form>
     </div>
   );
