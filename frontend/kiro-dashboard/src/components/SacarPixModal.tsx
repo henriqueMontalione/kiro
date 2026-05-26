@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { X, ChevronLeft, ChevronRight, Loader2, CheckCircle, AlertCircle, ExternalLink, Info } from 'lucide-react';
+import { X, ChevronLeft, ChevronRight, Loader2, CheckCircle, AlertCircle, ExternalLink } from 'lucide-react';
 import { Button } from './Button';
+import { TestnetHint } from './TestnetHint';
 import { useWallet } from '@/context/WalletContext';
 import { useQuote } from '@/context/QuoteContext';
 import { formatBRL, submitXdr } from '@/lib/stellar';
@@ -469,27 +470,7 @@ export function SacarPixModal({ open, onClose }: SacarPixModalProps) {
               Complete o cadastro abaixo para habilitar saques via PIX.
             </p>
 
-            {/* Testnet helper hint: the Etherfuse sandbox shows SMS/OTP codes
-                inside its orange "Sandbox Mode" helper, but the helper is hidden
-                or cropped on small viewports. The popout button gives the iframe
-                a full window where the helper can render. */}
-            <div
-              className="flex items-start gap-2 rounded-[var(--radius-sm)] border"
-              style={{
-                padding: '10px 12px',
-                background: 'rgba(255,181,71,0.06)',
-                borderColor: 'rgba(255,181,71,0.30)',
-              }}
-            >
-              <Info size={14} color="#FFB547" strokeWidth={1.7} className="mt-[2px] flex-shrink-0" />
-              <div className="text-[12px] leading-snug">
-                <p className="font-medium text-[var(--fg-1)] mb-[2px]">Modo Testnet</p>
-                <p className="text-[var(--fg-2)]">
-                  Os códigos de SMS/OTP não chegam no celular — eles aparecem no helper laranja do
-                  Etherfuse. Se o helper estiver cortado, abra em nova janela.
-                </p>
-              </div>
-            </div>
+            <TestnetHint onSkip={handleSandboxApprove} skipping={isSandboxApproving} />
 
             <button
               type="button"
