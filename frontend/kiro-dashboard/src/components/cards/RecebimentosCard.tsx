@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo } from 'react';
 import { Link2, ChevronRight } from 'lucide-react';
 import { Bar, BarChart, Cell, ResponsiveContainer } from 'recharts';
 import { Card, CardEyebrow } from '../Card';
 import { useWallet } from '@/context/WalletContext';
 import { useDashboard } from '@/context/DashboardContext';
-import { fetchTesouroPayments, formatBRL, type WalletPayment } from '@/lib/stellar';
+import { useTransactions } from '@/context/TransactionsContext';
+import { formatBRL, type WalletPayment } from '@/lib/stellar';
 
 function isSameDay(iso: string, ref: Date): boolean {
   return new Date(iso).toDateString() === ref.toDateString();
@@ -15,24 +16,14 @@ function isSameDay(iso: string, ref: Date): boolean {
  * plus an hourly bar chart of those arrivals.
  */
 export function RecebimentosCard() {
-  const { publicKey, balance, isConnected } = useWallet();
+  const { isConnected } = useWallet();
   const { valuesHidden, refreshTick } = useDashboard();
-  // `null` = haven't fetched yet (so we can show "—" instead of "R$ 0,00").
-  const [payments, setPayments] = useState<WalletPayment[] | null>(null);
+  const { payments: allPayments, refresh } = useTransactions();
+  const payments: WalletPayment[] | null = isConnected ? allPayments : null;
 
   useEffect(() => {
-    if (!publicKey) {
-      setPayments(null);
-      return;
-    }
-    let cancelled = false;
-    // Pull a generous slice so we can filter client-side for today's window.
-    // 100 is plenty for a merchant on a typical day.
-    fetchTesouroPayments(publicKey, 100).then((p) => {
-      if (!cancelled) setPayments(p);
-    });
-    return () => { cancelled = true; };
-  }, [publicKey, balance, refreshTick]);
+    if (refreshTick > 0) refresh();
+  }, [refreshTick, refresh]);
 
   const { totalLabel, countLabel, hourly } = useMemo(() => {
     const today = new Date();

@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { Plus, ShoppingBag } from 'lucide-react';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { StatusTag } from '@/components/StatusTag';
 import { useWallet } from '@/context/WalletContext';
-import { fetchTesouroPayments, formatBRL, type WalletPayment } from '@/lib/stellar';
+import { useTransactions } from '@/context/TransactionsContext';
+import { formatBRL, type WalletPayment } from '@/lib/stellar';
 
 interface RecebimentosProps {
   onReceive: () => void;
@@ -12,22 +13,11 @@ interface RecebimentosProps {
 
 /** Lists every TESOURO payment that has arrived in the connected wallet. */
 export default function Recebimentos({ onReceive }: RecebimentosProps) {
-  const { publicKey, balance, isConnected } = useWallet();
-  // `null` = haven't fetched yet (show skeleton). `[]` = fetched but empty.
-  const [payments, setPayments] = useState<WalletPayment[] | null>(null);
-
-  useEffect(() => {
-    if (!publicKey) {
-      setPayments(null);
-      return;
-    }
-    let cancelled = false;
-    fetchTesouroPayments(publicKey, 100).then((all) => {
-      if (cancelled) return;
-      setPayments(all.filter((p) => p.direction === 'in'));
-    });
-    return () => { cancelled = true; };
-  }, [publicKey, balance]);
+  const { isConnected } = useWallet();
+  const { payments: allPayments } = useTransactions();
+  const payments: WalletPayment[] | null = isConnected
+    ? allPayments.filter((p) => p.direction === 'in')
+    : null;
 
   const totalLabel = useMemo(() => {
     if (!payments || payments.length === 0) return null;

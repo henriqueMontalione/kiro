@@ -1,11 +1,12 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Download, Filter, Plus, Search, ShoppingBag, ArrowUpRight } from 'lucide-react';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { FilterChip } from '@/components/FilterChip';
 import { StatusTag } from '@/components/StatusTag';
 import { useWallet } from '@/context/WalletContext';
-import { fetchTesouroPayments, type WalletPayment } from '@/lib/stellar';
+import { useTransactions } from '@/context/TransactionsContext';
+import type { WalletPayment } from '@/lib/stellar';
 
 type FilterKey = 'todos' | 'recebidos' | 'saques';
 
@@ -14,25 +15,13 @@ interface TransacoesProps {
   onReceive?: () => void;
 }
 
-/** Full filterable list of every TESOURO movement on the connected wallet. */
+/** Full filterable list of every TESOURO movement recorded by the backend. */
 export default function Transacoes({ onReceive }: TransacoesProps) {
-  const { publicKey, balance, isConnected } = useWallet();
-  // `null` = haven't fetched yet (show skeleton). `[]` = fetched but empty.
-  const [payments, setPayments] = useState<WalletPayment[] | null>(null);
+  const { isConnected } = useWallet();
+  const { payments: allPayments } = useTransactions();
+  const payments: WalletPayment[] | null = isConnected ? allPayments : null;
   const [filter, setFilter] = useState<FilterKey>('todos');
   const [q, setQ] = useState('');
-
-  useEffect(() => {
-    if (!publicKey) {
-      setPayments(null);
-      return;
-    }
-    let cancelled = false;
-    fetchTesouroPayments(publicKey, 100).then((p) => {
-      if (!cancelled) setPayments(p);
-    });
-    return () => { cancelled = true; };
-  }, [publicKey, balance]);
 
   const filtered = useMemo(() => {
     if (!payments) return [];

@@ -7,6 +7,7 @@ import { DashboardProvider } from './context/DashboardContext';
 import { QuoteProvider } from './context/QuoteContext';
 import { NotificationsProvider } from './context/NotificationsContext';
 import { UserProfileProvider } from './context/UserProfileContext';
+import { TransactionsProvider } from './context/TransactionsContext';
 import { MfaGuard } from './components/MfaGuard';
 import './index.css';
 
@@ -36,13 +37,15 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
       <BrowserRouter>
         <WalletProvider>
           <UserProfileProvider>
-            <DashboardProvider>
-              <QuoteProvider>
-                <NotificationsProvider>
-                  <App />
-                </NotificationsProvider>
-              </QuoteProvider>
-            </DashboardProvider>
+            <TransactionsProvider>
+              <DashboardProvider>
+                <QuoteProvider>
+                  <NotificationsProvider>
+                    <App />
+                  </NotificationsProvider>
+                </QuoteProvider>
+              </DashboardProvider>
+            </TransactionsProvider>
           </UserProfileProvider>
         </WalletProvider>
       </BrowserRouter>

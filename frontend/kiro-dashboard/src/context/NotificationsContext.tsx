@@ -2,17 +2,14 @@ import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
   useMemo,
   useState,
   type ReactNode,
 } from 'react';
-import { useWallet } from './WalletContext';
-import { useDashboard } from './DashboardContext';
-import { fetchTesouroPayments, type WalletPayment } from '@/lib/stellar';
+import { useTransactions } from './TransactionsContext';
+import type { WalletPayment } from '@/lib/stellar';
 
 const SEEN_KEY = 'kiro_notifications_last_seen';
-const POLL_MS = 30_000;
 
 export interface Notification {
   id: string;
@@ -25,7 +22,6 @@ export interface Notification {
 interface NotificationsState {
   notifications: Notification[];
   unreadCount: number;
-  /** Mark every current notification as seen (called when the popover opens). */
   markAllRead: () => void;
 }
 
@@ -36,39 +32,15 @@ function buildTitle(p: WalletPayment): string {
   return `Saque de ${p.amountBRL} concluído`;
 }
 
-/**
- * Builds the notifications feed from on-chain TESOURO movements.
- * Only meaningful when a wallet is connected; otherwise the feed is empty
- * so the bell stays quiet on the unauthenticated landing.
- */
 export function NotificationsProvider({ children }: { children: ReactNode }) {
-  const { publicKey, balance } = useWallet();
-  const { refreshTick } = useDashboard();
-  const [payments, setPayments] = useState<WalletPayment[]>([]);
+  const { payments } = useTransactions();
   const [lastSeen, setLastSeen] = useState<string>(
     () => localStorage.getItem(SEEN_KEY) ?? '',
   );
 
-  const fetchOnce = useCallback(async () => {
-    if (!publicKey) {
-      setPayments([]);
-      return;
-    }
-    const p = await fetchTesouroPayments(publicKey, 20);
-    setPayments(p);
-  }, [publicKey]);
-
-  useEffect(() => {
-    fetchOnce();
-    if (!publicKey) return;
-    const id = setInterval(fetchOnce, POLL_MS);
-    return () => clearInterval(id);
-    // balance/refreshTick trigger a re-fetch when an on/off-ramp completes.
-  }, [publicKey, fetchOnce, balance, refreshTick]);
-
   const notifications = useMemo<Notification[]>(
     () =>
-      payments.map((p) => ({
+      payments.slice(0, 20).map((p) => ({
         id: p.id,
         direction: p.direction,
         title: buildTitle(p),
@@ -92,9 +64,7 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
   }, [notifications]);
 
   return (
-    <NotificationsContext.Provider
-      value={{ notifications, unreadCount, markAllRead }}
-    >
+    <NotificationsContext.Provider value={{ notifications, unreadCount, markAllRead }}>
       {children}
     </NotificationsContext.Provider>
   );

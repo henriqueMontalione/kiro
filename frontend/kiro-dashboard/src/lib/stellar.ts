@@ -84,7 +84,7 @@ export interface WalletPayment {
   createdAt: string;
 }
 
-function formatRelativeDate(iso: string): string {
+export function formatRelativeDate(iso: string): string {
   const date = new Date(iso);
   const now = new Date();
   const time = date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });

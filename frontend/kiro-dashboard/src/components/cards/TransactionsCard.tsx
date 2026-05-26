@@ -1,37 +1,27 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { ChevronRight, ShoppingBag, ShoppingCart, ArrowLeftRight, ArrowUpRight } from 'lucide-react';
 import { Card, CardEyebrow } from '../Card';
 import { StatusTag, type Status } from '../StatusTag';
 import type { Transaction } from '@/types';
 import { useWallet } from '@/context/WalletContext';
 import { useDashboard } from '@/context/DashboardContext';
-import { fetchTesouroPayments, type WalletPayment } from '@/lib/stellar';
+import { useTransactions } from '@/context/TransactionsContext';
+import type { WalletPayment } from '@/lib/stellar';
 
 interface TransactionsCardProps {
   onSeeAll: () => void;
 }
 
-/** "Transações Recentes" — most recent TESOURO movements from Horizon. */
+/** "Transações Recentes" — most recent TESOURO movements recorded by the backend. */
 export function TransactionsCard({ onSeeAll }: TransactionsCardProps) {
-  const { publicKey, balance, isConnected } = useWallet();
+  const { isConnected } = useWallet();
   const { valuesHidden, refreshTick } = useDashboard();
-  // `null` = haven't fetched yet (show skeleton). `[]` = fetched but empty.
-  const [payments, setPayments] = useState<WalletPayment[] | null>(null);
+  const { payments: allPayments, refresh } = useTransactions();
+  const payments = isConnected ? allPayments.slice(0, 5) : null;
 
-  // Re-fetch when wallet changes OR when balance changes (e.g. after an
-  // off-ramp completes and refreshBalance fires 6s later), OR when the
-  // user manually triggers a refresh from the toolbar.
   useEffect(() => {
-    if (!publicKey) {
-      setPayments(null);
-      return;
-    }
-    let cancelled = false;
-    fetchTesouroPayments(publicKey, 5).then((p) => {
-      if (!cancelled) setPayments(p);
-    });
-    return () => { cancelled = true; };
-  }, [publicKey, balance, refreshTick]);
+    if (refreshTick > 0) refresh();
+  }, [refreshTick, refresh]);
 
   return (
     <Card className="!p-[18px]">

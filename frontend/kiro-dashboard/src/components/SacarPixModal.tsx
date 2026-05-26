@@ -5,6 +5,8 @@ import { useWallet } from '@/context/WalletContext';
 import { useQuote } from '@/context/QuoteContext';
 import { formatBRL, submitXdr } from '@/lib/stellar';
 import { usePrivy } from '@privy-io/react-auth';
+import { createTransaction, tesouroToStroops } from '@/lib/api/transactions';
+import { useTransactions } from '@/context/TransactionsContext';
 import {
   startOnboarding,
   getKycStatus,
@@ -42,6 +44,7 @@ export function SacarPixModal({ open, onClose }: SacarPixModalProps) {
   const { isConnected, publicKey, balance, connect, signTransaction, refreshBalance } = useWallet();
   const { getAccessToken } = usePrivy();
   const { brlPerTesouro, brlToTesouro, formatTesouroAsBRL, refresh: refreshRate } = useQuote();
+  const { refresh: refreshTxs } = useTransactions();
 
   const [step, setStep] = useState<Step>('loading');
   const [kycUrl, setKycUrl] = useState('');
@@ -274,7 +277,19 @@ export function SacarPixModal({ open, onClose }: SacarPixModalProps) {
       if (!authToken) throw new Error('Sessão expirada. Faça login novamente.');
 
       setProcessingMsg('Finalizando...');
-      await submitXdr(signedXdr, authToken);
+      const stellarTxHash = await submitXdr(signedXdr, authToken);
+
+      const tesouroAmount = tesouroToStroops(quote.sourceAmount);
+      const brlAmount = Math.round(parseFloat(quote.destinationAmount) * 100);
+      createTransaction(authToken, {
+        direction: 'out',
+        tesouro_amount: tesouroAmount,
+        brl_amount: brlAmount,
+        stellar_tx_hash: stellarTxHash,
+        etherfuse_order_id: orderId,
+      })
+        .then(() => refreshTxs())
+        .catch((err) => console.warn('[SacarPixModal] createTransaction failed:', err));
 
       setStep('done');
     } catch (err) {

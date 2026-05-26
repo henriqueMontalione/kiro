@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { ChevronRight, ShoppingBag, ArrowUpRight } from 'lucide-react';
 import { Card } from '../Card';
 import { useWallet } from '@/context/WalletContext';
 import { useDashboard } from '@/context/DashboardContext';
-import { fetchTesouroPayments, type WalletPayment } from '@/lib/stellar';
+import { useTransactions } from '@/context/TransactionsContext';
+import type { WalletPayment } from '@/lib/stellar';
 
 interface MobileActivityCardProps {
   onSeeAll: () => void;
@@ -12,27 +13,18 @@ interface MobileActivityCardProps {
 }
 
 /**
- * Condensed "Atividade Recente" list for the mobile home. Pulls the most recent
- * TESOURO movements from Horizon and labels them as "Saque via PIX" (outgoing)
- * or "Pagamento via PIX" (incoming).
+ * Condensed "Atividade Recente" list for the mobile home. Reads the most recent
+ * TESOURO movements from the backend transactions log.
  */
 export function MobileActivityCard({ onSeeAll, limit = 3 }: MobileActivityCardProps) {
-  const { publicKey, balance, isConnected } = useWallet();
+  const { isConnected } = useWallet();
   const { valuesHidden, refreshTick } = useDashboard();
-  // `null` = pending fetch. `[]` = fetched but empty.
-  const [payments, setPayments] = useState<WalletPayment[] | null>(null);
+  const { payments: allPayments, refresh } = useTransactions();
+  const payments: WalletPayment[] | null = isConnected ? allPayments.slice(0, limit) : null;
 
   useEffect(() => {
-    if (!publicKey) {
-      setPayments(null);
-      return;
-    }
-    let cancelled = false;
-    fetchTesouroPayments(publicKey, limit).then((p) => {
-      if (!cancelled) setPayments(p);
-    });
-    return () => { cancelled = true; };
-  }, [publicKey, balance, limit, refreshTick]);
+    if (refreshTick > 0) refresh();
+  }, [refreshTick, refresh]);
 
   return (
     <Card>
