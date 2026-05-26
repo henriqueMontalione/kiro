@@ -77,22 +77,27 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
   const fetchProfile = useCallback(async () => {
     setStatus('loading');
     setErrorMessage(null);
+    console.log('[UserProfile] fetchProfile started');
     try {
       const token = await getAccessToken();
       if (!token) {
+        console.warn('[UserProfile] fetchProfile: no access token');
         setStatus('error');
         setErrorMessage('Sessão expirada. Faça login novamente.');
         return;
       }
       const p = await getMe(token);
       if (p === null) {
+        console.log('[UserProfile] backend returned 404 → needs_onboarding');
         setProfile(null);
         setStatus('needs_onboarding');
       } else {
+        console.log('[UserProfile] profile loaded successfully');
         setProfile(p);
         setStatus('ready');
       }
     } catch (err) {
+      console.error('[UserProfile] fetchProfile failed:', err);
       setStatus('error');
       setErrorMessage(err instanceof Error ? err.message : 'Erro ao carregar perfil');
     }

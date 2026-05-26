@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { Loader2, Store, AlertCircle } from 'lucide-react';
+import { Loader2, Store, AlertCircle, RefreshCw } from 'lucide-react';
 import { Button } from './Button';
 import { useUserProfile } from '@/context/UserProfileContext';
 import { currentRequiredConsents } from '@/lib/legal';
@@ -91,7 +91,13 @@ function validatePixKey(type: PixKeyType, raw: string): string {
  * to 'ready' and the modal unmounts.
  */
 export function CompleteOnboardingModal() {
-  const { status, email: privyEmail, completeOnboarding } = useUserProfile();
+  const {
+    status,
+    email: privyEmail,
+    errorMessage,
+    completeOnboarding,
+    refresh,
+  } = useUserProfile();
 
   const [storeName, setStoreName] = useState('');
   const [cnpj, setCnpj] = useState('');
@@ -101,16 +107,89 @@ export function CompleteOnboardingModal() {
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [consentAccepted, setConsentAccepted] = useState(false);
+  const [retrying, setRetrying] = useState(false);
 
   // Pre-fill the email from Privy once available.
   useEffect(() => {
     if (privyEmail && !email) setEmail(privyEmail);
   }, [privyEmail, email]);
 
-  // Reset the PIX field when type changes — a CPF can't survive a swap to email.
+
   useEffect(() => {
     setPixValue('');
   }, [pixType]);
+
+  if (status === 'error') {
+    const handleRetry = async () => {
+      setRetrying(true);
+      try {
+        await refresh();
+      } finally {
+        setRetrying(false);
+      }
+    };
+    return (
+      <div
+        className="fixed inset-0 z-[110] flex items-center justify-center p-4"
+        style={{ background: 'rgba(0,0,0,0.78)', backdropFilter: 'blur(8px)' }}
+      >
+        <div
+          className="w-full max-w-[420px] rounded-[var(--radius-xl)] border border-[var(--stroke-2)] flex flex-col items-center gap-5 text-center"
+          style={{
+            padding: '32px 28px 24px',
+            background: 'rgba(20, 22, 32, 0.98)',
+            backdropFilter: 'blur(24px) saturate(140%)',
+            boxShadow: 'var(--shadow-3)',
+          }}
+        >
+          <div
+            className="flex items-center justify-center rounded-full"
+            style={{
+              width: 56,
+              height: 56,
+              background: 'rgba(255,77,109,0.10)',
+              border: '1px solid rgba(255,77,109,0.30)',
+            }}
+          >
+            <AlertCircle size={24} strokeWidth={1.5} style={{ color: '#FF8FA3' }} />
+          </div>
+          <div>
+            <h2 className="text-[17px] font-semibold text-[var(--fg-1)]">
+              Não conseguimos carregar seu cadastro
+            </h2>
+            <p className="text-[13px] text-[var(--fg-2)] leading-relaxed mt-2">
+              Verifique sua conexão e tente novamente. Se o problema persistir,
+              entre em contato com o suporte.
+            </p>
+            {errorMessage && (
+              <p className="text-[11px] text-[var(--fg-3)] mt-3 font-mono">
+                {errorMessage}
+              </p>
+            )}
+          </div>
+          <Button
+            variant="primary"
+            size="lg"
+            onClick={handleRetry}
+            disabled={retrying}
+            className="w-full justify-center"
+          >
+            {retrying ? (
+              <>
+                <Loader2 size={16} strokeWidth={1.8} className="animate-spin" />
+                Tentando...
+              </>
+            ) : (
+              <>
+                <RefreshCw size={16} strokeWidth={1.8} />
+                Tentar novamente
+              </>
+            )}
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   if (status !== 'needs_onboarding') return null;
 
