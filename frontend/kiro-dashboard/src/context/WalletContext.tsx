@@ -11,6 +11,7 @@ import { usePrivy, useWallets, useCreateWallet } from '@privy-io/react-auth';
 import { Keypair, TransactionBuilder } from '@stellar/stellar-sdk';
 import { fetchTesouroBalance, NETWORK_PASSPHRASE } from '@/lib/stellar';
 import { deriveEdSeedFromPrf, wipeBytes } from '@/lib/passkey/crypto';
+import { setAuthTokenProvider } from '@/lib/anchors/etherfuse/client';
 
 // This message is part of the key derivation — changing it rotates every wallet.
 const DERIVATION_MESSAGE = 'kiro:stellar:seed:v1';
@@ -58,6 +59,11 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   // mounts → unmounts → remounts each effect, which would fire two concurrent
   // personal_sign requests and stall Privy's signing UI.
   const derivingRef = useRef(false);
+
+  useEffect(() => {
+    setAuthTokenProvider(getAccessToken);
+    return () => setAuthTokenProvider(null);
+  }, [getAccessToken]);
 
   // Derive the Stellar wallet from the Privy embedded EVM wallet via HKDF.
   // The EVM wallet signs a fixed message — same wallet always produces the

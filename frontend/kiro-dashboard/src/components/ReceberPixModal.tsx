@@ -13,7 +13,6 @@ import {
   getOnRampOrder,
   regenerateClaimXdr,
   sandboxApprove,
-  simulateOnRampPayment,
   type OnRampQuoteResult,
   type OnRampOrderResult,
 } from '@/lib/anchors/etherfuse/client';
@@ -307,11 +306,13 @@ export function ReceberPixModal({ open, onClose }: ReceberPixModalProps) {
       setStep('pix');
       startOrderPolling(o.orderId);
 
-      if (SANDBOX_ENABLED) {
-        simulateOnRampPayment(o.orderId).catch((err) => {
-          console.warn('[ReceberPixModal] simulateOnRampPayment failed:', err);
-        });
-      }
+      // Disabled while Etherfuse sandbox investigation is open: orders get
+      // stuck in "processing" after /fiat_received fires. Re-enable later.
+      // if (SANDBOX_ENABLED) {
+      //   simulateOnRampPayment(o.orderId).catch((err) => {
+      //     console.warn('[ReceberPixModal] simulateOnRampPayment failed:', err);
+      //   });
+      // }
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : 'Erro ao criar ordem');
       setStep('error');

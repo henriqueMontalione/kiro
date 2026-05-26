@@ -171,6 +171,11 @@ function etherfuseApi(env: ApiEnv): Plugin {
         const method = req.method ?? 'GET';
 
         try {
+          const auth = (req.headers['authorization'] as string | undefined) ?? '';
+          if (!auth.startsWith('Bearer ')) {
+            return sendJson(res, { error: 'Não autorizado' }, 401);
+          }
+
           // POST /api/ef-onboarding → POST /ramp/onboarding-url
           // Returns canonical { customerId, bankAccountId, kycUrl }. If the wallet
           // is already onboarded under a different customer ("see org: XYZ"), we

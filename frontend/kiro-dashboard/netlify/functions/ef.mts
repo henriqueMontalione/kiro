@@ -1,17 +1,46 @@
 import { randomUUID } from 'node:crypto';
+import { createRemoteJWKSet, jwtVerify } from 'jose';
 
 /**
  * Etherfuse off/on-ramp proxy — production counterpart of the `etherfuseApi`
  * Vite plugin in `vite.config.ts`. Same endpoints, same shapes, same recovery
  * logic for the "wallet already onboarded" 409.
  *
- * Reads ETHERFUSE_API_KEY from server-side env vars so the key never reaches
- * the browser bundle.
+ * Security:
+ *   - Every endpoint requires a valid Privy JWT (Authorization: Bearer <token>).
+ *   - ETHERFUSE_API_KEY is read server-side only — never reaches the browser.
  */
 
 const API_KEY = process.env.ETHERFUSE_API_KEY ?? '';
 const BASE_URL = (process.env.ETHERFUSE_BASE_URL ?? 'https://api.sand.etherfuse.com').replace(/\/$/, '');
 const TESOURO_ASSET = `${process.env.VITE_TESOURO_CODE ?? 'TESOURO'}:${process.env.VITE_TESOURO_ISSUER ?? ''}`;
+const PRIVY_APP_ID = process.env.VITE_PRIVY_APP_ID ?? '';
+
+const JWKS = PRIVY_APP_ID
+  ? createRemoteJWKSet(
+      new URL(`https://auth.privy.io/api/v1/apps/${PRIVY_APP_ID}/jwks.json`),
+    )
+  : null;
+
+async function verifyPrivyAuth(req: Request): Promise<string> {
+  if (!JWKS || !PRIVY_APP_ID) {
+    throw Object.assign(new Error('PRIVY_APP_ID não configurado'), { status: 500 });
+  }
+  const auth = req.headers.get('Authorization') ?? '';
+  if (!auth.startsWith('Bearer ')) {
+    throw Object.assign(new Error('Não autorizado'), { status: 401 });
+  }
+  const token = auth.slice(7);
+  try {
+    const { payload } = await jwtVerify(token, JWKS, {
+      issuer: 'privy.io',
+      audience: PRIVY_APP_ID,
+    });
+    return payload.sub as string;
+  } catch {
+    throw Object.assign(new Error('Token inválido ou expirado'), { status: 401 });
+  }
+}
 
 interface ErrorWithStatus extends Error {
   status?: number;
@@ -81,6 +110,8 @@ export default async (req: Request): Promise<Response> => {
   const method = req.method;
 
   try {
+    await verifyPrivyAuth(req);
+
     // POST /api/ef-onboarding — onboards a wallet, recovering existing
     // customer if the wallet is already registered under another org.
     if (url.pathname === '/api/ef-onboarding' && method === 'POST') {

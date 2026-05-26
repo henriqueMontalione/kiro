@@ -2,6 +2,14 @@ import type { KycStatus, SavedFiatAccount } from '../types';
 
 const BASE = '/api';
 
+type TokenProvider = () => Promise<string | null>;
+
+let tokenProvider: TokenProvider | null = null;
+
+export function setAuthTokenProvider(fn: TokenProvider | null): void {
+  tokenProvider = fn;
+}
+
 async function apiFetch<T>(
   method: 'GET' | 'POST',
   path: string,
@@ -13,9 +21,15 @@ async function apiFetch<T>(
     Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
   }
 
+  const token = tokenProvider ? await tokenProvider() : null;
+  if (!token) throw new Error('Sessão expirada. Faça login novamente.');
+
   const res = await fetch(url.toString(), {
     method,
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
     ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
   });
 
