@@ -19,7 +19,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
       appId={PRIVY_APP_ID}
       config={{
         mfa: { noPromptOnMfaRequired: false },
-        loginMethods: ['email', 'google', 'apple'],
+        loginMethods: ['email', 'google'],
         appearance: {
           theme: 'dark',
           accentColor: '#00FF87',
