@@ -12,6 +12,7 @@ import (
 
 	"github.com/kiro-app/backend/internal/auth"
 	"github.com/kiro-app/backend/internal/config"
+	"github.com/kiro-app/backend/internal/crypto"
 	"github.com/kiro-app/backend/internal/db/sqlc"
 )
 
@@ -20,15 +21,17 @@ type Server struct {
 	pool     *pgxpool.Pool
 	queries  *sqlc.Queries
 	verifier *auth.Verifier
+	vault    *crypto.Vault
 	logger   *log.Logger
 }
 
-func NewRouter(cfg *config.Config, pool *pgxpool.Pool, verifier *auth.Verifier) http.Handler {
+func NewRouter(cfg *config.Config, pool *pgxpool.Pool, verifier *auth.Verifier, vault *crypto.Vault) http.Handler {
 	s := &Server{
 		cfg:      cfg,
 		pool:     pool,
 		queries:  sqlc.New(pool),
 		verifier: verifier,
+		vault:    vault,
 		logger:   log.New(os.Stdout, "[api] ", log.LstdFlags|log.Lmsgprefix),
 	}
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"regexp"
@@ -24,14 +25,8 @@ var (
 	policyVersionRegex = regexp.MustCompile(`^v\d+(\.\d+){0,2}$`)
 )
 
-// requiredPolicies must all be accepted at user creation time. Adding a new
-// required policy means existing users will need to re-consent before they
-// can continue using the app (UI handles that via a separate flow).
 var requiredPolicies = []string{"terms_of_use", "privacy_policy"}
 
-// userResponse is what we expose over HTTP — uses the same shape as the
-// sqlc.User model. Defined as a separate type to lock the public contract
-// independent of internal struct evolution.
 type userResponse struct {
 	ID               uuid.UUID `json:"id"`
 	StoreName        string    `json:"store_name"`
@@ -44,22 +39,36 @@ type userResponse struct {
 	UpdatedAt        string    `json:"updated_at"`
 }
 
-func toResponse(u sqlc.User) userResponse {
+func (s *Server) toResponse(u sqlc.User) (userResponse, error) {
+	storeName, err := s.vault.Decrypt(u.StoreNameEnc)
+	if err != nil {
+		return userResponse{}, fmt.Errorf("decrypt store_name: %w", err)
+	}
+	cnpj, err := s.vault.Decrypt(u.CnpjEnc)
+	if err != nil {
+		return userResponse{}, fmt.Errorf("decrypt cnpj: %w", err)
+	}
+	email, err := s.vault.Decrypt(u.EmailEnc)
+	if err != nil {
+		return userResponse{}, fmt.Errorf("decrypt email: %w", err)
+	}
+	pixKey, err := s.vault.Decrypt(u.PixKeyEnc)
+	if err != nil {
+		return userResponse{}, fmt.Errorf("decrypt pix_key: %w", err)
+	}
 	return userResponse{
 		ID:               u.ID,
-		StoreName:        u.StoreName,
-		Cnpj:             u.Cnpj,
-		Email:            u.Email,
-		PixKey:           u.PixKey,
+		StoreName:        storeName,
+		Cnpj:             cnpj,
+		Email:            email,
+		PixKey:           pixKey,
 		StellarPublicKey: u.StellarPublicKey,
 		Status:           u.Status,
 		CreatedAt:        u.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 		UpdatedAt:        u.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
-	}
+	}, nil
 }
 
-// GET /api/me — returns the authenticated lojista's profile. 404 if they
-// haven't completed onboarding yet (frontend should redirect to the form).
 func (s *Server) getMe(w http.ResponseWriter, r *http.Request) {
 	identity := identityFrom(r.Context())
 	if identity == nil {
@@ -78,12 +87,15 @@ func (s *Server) getMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, toResponse(user))
+	resp, err := s.toResponse(user)
+	if err != nil {
+		s.logger.Printf("getMe decrypt: %v", err)
+		writeError(w, http.StatusInternalServerError, "Erro interno")
+		return
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
 
-// consentAcceptance is a single consent line in the createMe body. Each entry
-// becomes one INSERT into consent_logs inside the same transaction as the
-// user creation.
 type consentAcceptance struct {
 	PolicyType    string `json:"policy_type"`
 	PolicyVersion string `json:"policy_version"`
@@ -98,9 +110,6 @@ type createMeBody struct {
 	Consents         []consentAcceptance `json:"consents"`
 }
 
-// POST /api/me — creates the lojista profile on first login. The user row
-// and the consent_log entries are written atomically: if any consent insert
-// fails (or the required policies aren't accepted), nothing is persisted.
 func (s *Server) createMe(w http.ResponseWriter, r *http.Request) {
 	identity := identityFrom(r.Context())
 	if identity == nil {
@@ -120,7 +129,6 @@ func (s *Server) createMe(w http.ResponseWriter, r *http.Request) {
 	body.PixKey = strings.TrimSpace(body.PixKey)
 	body.StellarPublicKey = strings.TrimSpace(body.StellarPublicKey)
 
-	// Fall back to Privy's email claim when the client didn't pass one.
 	if body.Email == "" && identity.Email != "" {
 		body.Email = strings.ToLower(identity.Email)
 	}
@@ -129,6 +137,32 @@ func (s *Server) createMe(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, msg)
 		return
 	}
+
+	storeNameEnc, err := s.vault.Encrypt(body.StoreName)
+	if err != nil {
+		s.logger.Printf("createMe encrypt store_name: %v", err)
+		writeError(w, http.StatusInternalServerError, "Erro interno")
+		return
+	}
+	cnpjEnc, err := s.vault.Encrypt(body.Cnpj)
+	if err != nil {
+		s.logger.Printf("createMe encrypt cnpj: %v", err)
+		writeError(w, http.StatusInternalServerError, "Erro interno")
+		return
+	}
+	emailEnc, err := s.vault.Encrypt(body.Email)
+	if err != nil {
+		s.logger.Printf("createMe encrypt email: %v", err)
+		writeError(w, http.StatusInternalServerError, "Erro interno")
+		return
+	}
+	pixKeyEnc, err := s.vault.Encrypt(body.PixKey)
+	if err != nil {
+		s.logger.Printf("createMe encrypt pix_key: %v", err)
+		writeError(w, http.StatusInternalServerError, "Erro interno")
+		return
+	}
+	cnpjHash := s.vault.Hash(body.Cnpj)
 
 	ip := pgTextOrNull(clientIP(r))
 	ua := pgTextOrNull(r.UserAgent())
@@ -139,22 +173,23 @@ func (s *Server) createMe(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "Erro interno")
 		return
 	}
-	defer tx.Rollback(context.Background()) // no-op if Commit succeeded
+	defer tx.Rollback(context.Background())
 
 	q := sqlc.New(tx)
 
 	user, err := q.CreateUser(r.Context(), sqlc.CreateUserParams{
 		ID:               uuid.New(),
 		PrivyUserID:      identity.DID,
-		StoreName:        body.StoreName,
-		Cnpj:             body.Cnpj,
-		Email:            body.Email,
-		PixKey:           body.PixKey,
+		StoreNameEnc:     storeNameEnc,
+		CnpjEnc:          cnpjEnc,
+		CnpjHash:         cnpjHash,
+		EmailEnc:         emailEnc,
+		PixKeyEnc:        pixKeyEnc,
 		StellarPublicKey: body.StellarPublicKey,
 	})
 	if err != nil {
 		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == "23505" { // unique_violation
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
 			switch {
 			case strings.Contains(pgErr.ConstraintName, "privy"):
 				writeError(w, http.StatusConflict, "Esta conta já tem um cadastro")
@@ -192,7 +227,13 @@ func (s *Server) createMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusCreated, toResponse(user))
+	resp, err := s.toResponse(user)
+	if err != nil {
+		s.logger.Printf("createMe decrypt: %v", err)
+		writeError(w, http.StatusInternalServerError, "Erro interno")
+		return
+	}
+	writeJSON(w, http.StatusCreated, resp)
 }
 
 type updateMeBody struct {
@@ -200,9 +241,6 @@ type updateMeBody struct {
 	PixKey    *string `json:"pix_key,omitempty"`
 }
 
-// PATCH /api/me — partial update. Only store_name and pix_key are mutable
-// here; CNPJ, email and Stellar key require dedicated flows (re-KYC, key
-// rotation) which we'll add later.
 func (s *Server) updateMe(w http.ResponseWriter, r *http.Request) {
 	identity := identityFrom(r.Context())
 	if identity == nil {
@@ -223,7 +261,13 @@ func (s *Server) updateMe(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "Nome da loja inválido")
 			return
 		}
-		params.StoreName = pgtype.Text{String: trimmed, Valid: true}
+		enc, err := s.vault.Encrypt(trimmed)
+		if err != nil {
+			s.logger.Printf("updateMe encrypt store_name: %v", err)
+			writeError(w, http.StatusInternalServerError, "Erro interno")
+			return
+		}
+		params.StoreNameEnc = enc
 	}
 	if body.PixKey != nil {
 		trimmed := strings.TrimSpace(*body.PixKey)
@@ -231,7 +275,13 @@ func (s *Server) updateMe(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "Chave PIX inválida")
 			return
 		}
-		params.PixKey = pgtype.Text{String: trimmed, Valid: true}
+		enc, err := s.vault.Encrypt(trimmed)
+		if err != nil {
+			s.logger.Printf("updateMe encrypt pix_key: %v", err)
+			writeError(w, http.StatusInternalServerError, "Erro interno")
+			return
+		}
+		params.PixKeyEnc = enc
 	}
 
 	user, err := s.queries.UpdateUser(r.Context(), params)
@@ -245,14 +295,15 @@ func (s *Server) updateMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, toResponse(user))
+	resp, err := s.toResponse(user)
+	if err != nil {
+		s.logger.Printf("updateMe decrypt: %v", err)
+		writeError(w, http.StatusInternalServerError, "Erro interno")
+		return
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
 
-// DELETE /api/me — revogation of consent (LGPD Art. 8º, §5º). Logs a 'revoked'
-// event for every currently-granted policy, then soft-deletes the user.
-// We preserve the user row so sales/withdrawals/anticipations referencing
-// them remain auditable; PII purging happens via a separate retention job
-// after the legally-mandated period.
 func (s *Server) deleteMe(w http.ResponseWriter, r *http.Request) {
 	identity := identityFrom(r.Context())
 	if identity == nil {
@@ -262,7 +313,6 @@ func (s *Server) deleteMe(w http.ResponseWriter, r *http.Request) {
 
 	user, err := s.queries.GetUserByPrivyID(r.Context(), identity.DID)
 	if errors.Is(err, pgx.ErrNoRows) {
-		// Already deleted (or never created) — treat as idempotent success.
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
@@ -294,7 +344,7 @@ func (s *Server) deleteMe(w http.ResponseWriter, r *http.Request) {
 
 	for _, c := range active {
 		if c.Action != "granted" {
-			continue // already revoked previously
+			continue
 		}
 		if _, err := q.InsertConsentLog(r.Context(), sqlc.InsertConsentLogParams{
 			ID:            uuid.New(),
@@ -351,8 +401,6 @@ func validateConsents(consents []consentAcceptance) string {
 		if !policyVersionRegex.MatchString(c.PolicyVersion) {
 			return "Versão de política inválida"
 		}
-		// policy_type is also CHECK-constrained in the database, but we fail
-		// faster here with a friendlier error.
 		switch c.PolicyType {
 		case "terms_of_use", "privacy_policy":
 			seen[c.PolicyType] = true
@@ -378,9 +426,6 @@ func digitsOnly(s string) string {
 	return b.String()
 }
 
-// clientIP returns the request's client IP without the port. Assumes the
-// chi middleware.RealIP already normalised r.RemoteAddr from X-Forwarded-For
-// or X-Real-IP — see router.go.
 func clientIP(r *http.Request) string {
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {

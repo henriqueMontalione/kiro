@@ -43,6 +43,7 @@ services:
       DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?sslmode=disable
       PRIVY_APP_ID: ${VITE_PRIVY_APP_ID}
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:5173}
+      PII_MASTER_KEY: ${PII_MASTER_KEY}
     depends_on:
       db:
         condition: service_healthy

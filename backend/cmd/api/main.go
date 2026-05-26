@@ -16,6 +16,7 @@ import (
 	"github.com/kiro-app/backend/internal/api"
 	"github.com/kiro-app/backend/internal/auth"
 	"github.com/kiro-app/backend/internal/config"
+	"github.com/kiro-app/backend/internal/crypto"
 	"github.com/kiro-app/backend/internal/migrate"
 	"github.com/kiro-app/backend/migrations"
 )
@@ -56,7 +57,12 @@ func main() {
 		log.Fatalf("privy verifier: %v", err)
 	}
 
-	handler := api.NewRouter(cfg, pool, verifier)
+	vault, err := crypto.NewVault(cfg.PIIMasterKey)
+	if err != nil {
+		log.Fatalf("pii vault: %v", err)
+	}
+
+	handler := api.NewRouter(cfg, pool, verifier, vault)
 
 	srv := &http.Server{
 		Addr:              ":" + cfg.Port,
