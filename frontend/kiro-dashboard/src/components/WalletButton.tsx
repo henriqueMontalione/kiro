@@ -1,9 +1,9 @@
-import { Loader2, Wallet } from 'lucide-react';
+import { Loader2, LogIn } from 'lucide-react';
 import { useWallet } from '@/context/WalletContext';
 
 /**
- * Desktop variant — "Entrar" CTA when disconnected. Connected identity and
- * logout live in the user chip (Header), so the connected state renders nothing.
+ * Desktop variant — login CTA when disconnected. Connected identity and
+ * logout live in the user menu (Header), so the connected state renders nothing.
  */
 export function WalletButton() {
   const { isConnected, publicKey, isLoading, connect } = useWallet();
@@ -14,7 +14,7 @@ export function WalletButton() {
     return (
       <div className="inline-flex items-center gap-2 rounded-full border border-[var(--stroke-2)] bg-transparent px-3 py-[6px] text-[var(--fg-3)] font-sans text-[13px]">
         <Loader2 size={14} strokeWidth={1.8} className="animate-spin" />
-        Conectando…
+        Entrando…
       </div>
     );
   }
@@ -23,21 +23,27 @@ export function WalletButton() {
     <button
       type="button"
       onClick={connect}
-      className="inline-flex items-center gap-2 rounded-full border border-[var(--stroke-2)] bg-transparent hover:bg-white/[0.04] transition-colors cursor-pointer text-[var(--fg-2)] hover:text-[var(--fg-1)] font-sans text-[13px]"
-      style={{ padding: '6px 16px' }}
+      className="inline-flex items-center gap-2 rounded-full border-none cursor-pointer transition-colors font-sans text-[13px] font-medium"
+      style={{
+        padding: '8px 18px',
+        background: 'var(--kiro-green)',
+        color: 'var(--bg-0)',
+      }}
     >
-      <Wallet size={14} strokeWidth={1.6} />
+      <LogIn size={14} strokeWidth={1.8} />
       Entrar
     </button>
   );
 }
 
 /**
- * Compact variant for the mobile header — icon-only that opens the Privy
- * login modal directly on tap (or disconnects when already connected).
+ * Mobile variant — login CTA when disconnected; nothing when connected
+ * (logout lives in the avatar menu of MobileHeader).
  */
 export function WalletButtonMobile() {
-  const { isConnected, isLoading, connect, disconnect } = useWallet();
+  const { isConnected, isLoading, connect } = useWallet();
+
+  if (isConnected) return null;
 
   if (isLoading) {
     return (
@@ -50,12 +56,17 @@ export function WalletButtonMobile() {
   return (
     <button
       type="button"
-      onClick={isConnected ? disconnect : connect}
-      aria-label={isConnected ? 'Desconectar carteira' : 'Conectar carteira'}
-      className="relative inline-flex items-center justify-center rounded-full bg-transparent border-none cursor-pointer transition-colors hover:bg-white/[0.04]"
-      style={{ width: 44, height: 44, color: isConnected ? 'var(--kiro-green)' : 'var(--fg-2)' }}
+      onClick={connect}
+      aria-label="Entrar"
+      className="inline-flex items-center gap-2 rounded-full border-none cursor-pointer transition-colors font-sans text-[13px] font-medium"
+      style={{
+        padding: '8px 16px',
+        background: 'var(--kiro-green)',
+        color: 'var(--bg-0)',
+      }}
     >
-      <Wallet size={22} strokeWidth={1.6} />
+      <LogIn size={16} strokeWidth={1.8} />
+      Entrar
     </button>
   );
 }

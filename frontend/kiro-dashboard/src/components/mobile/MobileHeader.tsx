@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Bell, Settings } from 'lucide-react';
+import { Bell } from 'lucide-react';
 import { NotificationsPopover } from '../NotificationsPopover';
+import { UserMenu } from '../UserMenu';
 import { WalletButtonMobile } from '../WalletButton';
 import { useUserProfile } from '@/context/UserProfileContext';
 import { useWallet } from '@/context/WalletContext';
@@ -18,7 +18,6 @@ export function MobileHeader() {
   const { name, initials, photoUrl } = useUserProfile();
   const { isConnected } = useWallet();
   const { unreadCount } = useNotifications();
-  const navigate = useNavigate();
 
   return (
     <header
@@ -56,7 +55,7 @@ export function MobileHeader() {
             KIRO
           </span>
           <span className="text-[12px] text-[var(--fg-3)] font-sans">
-            Conecte sua carteira
+            Entre na sua conta
           </span>
         </div>
       )}
@@ -65,15 +64,7 @@ export function MobileHeader() {
         <WalletButtonMobile />
         {isConnected && (
           <>
-            <button
-              type="button"
-              onClick={() => navigate('/config')}
-              aria-label="Configurações"
-              className="inline-flex items-center justify-center rounded-full bg-transparent border-none cursor-pointer text-[var(--fg-1)] hover:bg-white/[0.04] transition-colors"
-              style={{ width: 44, height: 44 }}
-            >
-              <Settings size={22} strokeWidth={1.6} />
-            </button>
+            <UserMenu mode="iconButton" />
             <button
               type="button"
               onClick={() => setNotifOpen((o) => !o)}
