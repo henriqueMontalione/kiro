@@ -83,9 +83,6 @@ export function WalletSignModal() {
               : 'Para confirmar que é você, precisamos de uma verificação rápida.'}
             {' '}É gratuito e não gera nenhuma cobrança.
           </p>
-          <p className="text-[12px]" style={{ color: 'var(--fg-3)' }}>
-            Na próxima tela, clique no botão verde para continuar.
-          </p>
         </div>
 
         <Button
