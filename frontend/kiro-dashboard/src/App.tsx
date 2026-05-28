@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
+import { useWallet } from '@/context/WalletContext';
 import { Sidebar } from '@/components/Sidebar';
 import { Header } from '@/components/Header';
 import { MobileHeader } from '@/components/mobile/MobileHeader';
@@ -75,7 +76,7 @@ export default function App() {
               <Route path="/clientes" element={<Placeholder name="Clientes" />} />
               <Route path="/relatorios" element={<Placeholder name="Relatórios" />} />
               <Route path="/integracoes" element={<Placeholder name="Integrações" />} />
-              <Route path="/config" element={<Configuracoes />} />
+              <Route path="/config" element={<RequireAuth><Configuracoes /></RequireAuth>} />
               <Route path="/mais" element={<Placeholder name="Mais" />} />
               <Route path="*" element={<Navigate to="/resumo" replace />} />
             </Routes>
@@ -93,4 +94,10 @@ export default function App() {
       <CompleteOnboardingModal />
     </div>
   );
+}
+
+function RequireAuth({ children }: { children: ReactNode }) {
+  const { isConnected } = useWallet();
+  if (!isConnected) return <Navigate to="/resumo" replace />;
+  return <>{children}</>;
 }
