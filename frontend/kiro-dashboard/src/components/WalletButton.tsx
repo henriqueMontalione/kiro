@@ -1,39 +1,20 @@
-import { Loader2, LogOut, Wallet } from 'lucide-react';
+import { Loader2, Wallet } from 'lucide-react';
 import { useWallet } from '@/context/WalletContext';
-import { truncateKey } from '@/lib/stellar';
 
 /**
- * Desktop variant — connected pill with key + logout, or "Entrar" button.
+ * Desktop variant — "Entrar" CTA when disconnected. Connected identity and
+ * logout live in the user chip (Header), so the connected state renders nothing.
  */
 export function WalletButton() {
-  const { isConnected, publicKey, isLoading, connect, disconnect } = useWallet();
+  const { isConnected, publicKey, isLoading, connect } = useWallet();
+
+  if (isConnected && publicKey) return null;
 
   if (isLoading) {
     return (
       <div className="inline-flex items-center gap-2 rounded-full border border-[var(--stroke-2)] bg-transparent px-3 py-[6px] text-[var(--fg-3)] font-sans text-[13px]">
         <Loader2 size={14} strokeWidth={1.8} className="animate-spin" />
         Conectando…
-      </div>
-    );
-  }
-
-  if (isConnected && publicKey) {
-    return (
-      <div className="inline-flex items-center gap-1 rounded-full border border-[var(--stroke-green)] bg-[var(--success-bg)]">
-        <div className="inline-flex items-center gap-2 pl-3 pr-2 py-[6px] font-sans text-[13px] text-[var(--kiro-green)]">
-          <Wallet size={13} strokeWidth={1.8} />
-          <span className="font-mono tracking-tight">{truncateKey(publicKey)}</span>
-        </div>
-        <button
-          type="button"
-          onClick={disconnect}
-          aria-label="Desconectar carteira"
-          title="Desconectar"
-          className="inline-flex items-center justify-center rounded-full bg-transparent border-none cursor-pointer text-[var(--fg-3)] hover:text-[var(--danger)] hover:bg-white/[0.04] transition-colors mr-1"
-          style={{ width: 28, height: 28 }}
-        >
-          <LogOut size={13} strokeWidth={1.8} />
-        </button>
       </div>
     );
   }
