@@ -26,6 +26,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
           landingHeader: 'Entrar no Kiro',
         },
         embeddedWallets: {
+          showWalletUIs: false,
           ethereum: {
             createOnLogin: 'users-without-wallets',
           },
