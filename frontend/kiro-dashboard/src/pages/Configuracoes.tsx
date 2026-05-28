@@ -1,4 +1,4 @@
-import { useRef, useState, type ChangeEvent, type ComponentType, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent, type ComponentType, type ReactNode } from 'react';
 import { Camera, Check, Fingerprint, KeyRound, LogOut, Mail, Plus, Trash2, User } from 'lucide-react';
 import { usePrivy, useMfaEnrollment } from '@privy-io/react-auth';
 import { Button } from '@/components/Button';
@@ -25,6 +25,16 @@ export default function Configuracoes() {
   const [saved, setSaved] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const hydratedRef = useRef(false);
+
+  useEffect(() => {
+    if (hydratedRef.current) return;
+    if (profile.name) {
+      setName(profile.name);
+      setPhotoPreview(profile.photoUrl);
+      hydratedRef.current = true;
+    }
+  }, [profile.name, profile.photoUrl]);
 
   async function handleLogout() {
     if (loggingOut) return;
