@@ -120,7 +120,7 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
 
   const completeOnboarding = useCallback(
     async (body: Omit<CreateMeBody, 'stellar_public_key'>) => {
-      if (!publicKey) throw new Error('Carteira não conectada');
+      if (!publicKey) throw new Error('Você precisa estar logado para continuar.');
       const token = await getAccessToken();
       if (!token) throw new Error('Sessão expirada. Faça login novamente.');
 

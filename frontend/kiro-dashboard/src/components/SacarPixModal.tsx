@@ -455,10 +455,10 @@ export function SacarPixModal({ open, onClose }: SacarPixModalProps) {
         {step === 'no_wallet' && (
           <div className="flex flex-col gap-5">
             <p className="text-[14px] text-[var(--fg-2)] leading-relaxed">
-              Conecte sua carteira Stellar para sacar via PIX.
+              Entre na sua conta para sacar via PIX.
             </p>
             <Button variant="primary" size="lg" onClick={() => connect()} className="w-full justify-center">
-              Conectar carteira
+              Entrar
             </Button>
           </div>
         )}

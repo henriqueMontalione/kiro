@@ -477,10 +477,10 @@ export function ReceberPixModal({ open, onClose }: ReceberPixModalProps) {
         {step === 'no_wallet' && (
           <div className="flex flex-col gap-5">
             <p className="text-[14px] text-[var(--fg-2)] leading-relaxed">
-              Conecte sua carteira Stellar para receber via PIX.
+              Entre na sua conta para receber via PIX.
             </p>
             <Button variant="primary" size="lg" onClick={() => connect()} className="w-full justify-center">
-              Conectar carteira
+              Entrar
             </Button>
           </div>
         )}
@@ -598,7 +598,7 @@ export function ReceberPixModal({ open, onClose }: ReceberPixModalProps) {
                 />
               </div>
               <p className="text-[12px] text-[var(--fg-3)]">
-                Você pagará via PIX e o equivalente em TESOURO chegará na sua carteira.
+                Você pagará via PIX e o equivalente em TESOURO chegará na sua conta.
               </p>
             </div>
 
@@ -654,7 +654,7 @@ export function ReceberPixModal({ open, onClose }: ReceberPixModalProps) {
             </div>
 
             <p className="text-[12px] text-[var(--fg-3)] text-center leading-relaxed">
-              Cotação válida por alguns minutos. O TESOURO chegará na sua carteira após a confirmação do PIX.
+              Cotação válida por alguns minutos. O TESOURO chegará na sua conta após a confirmação do PIX.
             </p>
 
             <div className="flex gap-3">
@@ -680,7 +680,7 @@ export function ReceberPixModal({ open, onClose }: ReceberPixModalProps) {
         {step === 'pix' && order && (
           <div className="flex flex-col gap-4">
             <p className="text-[13px] text-[var(--fg-2)] text-center leading-relaxed">
-              Pague <strong style={{ color: 'var(--kiro-green)' }}>{formatBRL(order.depositAmount)}</strong> via PIX para receber o TESOURO na sua carteira.
+              Pague <strong style={{ color: 'var(--kiro-green)' }}>{formatBRL(order.depositAmount)}</strong> via PIX para receber o TESOURO na sua conta.
             </p>
 
             <div
@@ -738,7 +738,7 @@ export function ReceberPixModal({ open, onClose }: ReceberPixModalProps) {
             <div>
               <p className="text-[18px] font-semibold text-[var(--fg-1)] mb-1">Pagamento recebido!</p>
               <p className="text-[13px] text-[var(--fg-3)] leading-relaxed">
-                O TESOURO foi creditado na sua carteira.
+                O TESOURO foi creditado na sua conta.
               </p>
             </div>
             <Button variant="primary" size="lg" onClick={handleClose} className="w-full justify-center">

@@ -45,7 +45,7 @@ export default function Transacoes({ onReceive }: TransacoesProps) {
         <div>
           <h1 className="k-h1">Transações</h1>
           <div className="text-[13px] text-[var(--fg-3)] mt-1">
-            Todas as movimentações da sua carteira KIRO.
+            Todas as movimentações da sua conta Kiro.
           </div>
         </div>
         <div className="flex gap-[10px]">
@@ -120,7 +120,7 @@ export default function Transacoes({ onReceive }: TransacoesProps) {
         </div>
 
         {!isConnected && (
-          <EmptyState message="Conecte sua carteira para ver suas movimentações." />
+          <EmptyState message="Entre na sua conta para ver suas movimentações." />
         )}
         {isConnected && payments === null && <SkeletonList />}
         {isConnected && payments && filtered.length === 0 && (

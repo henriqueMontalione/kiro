@@ -44,7 +44,7 @@ export function MobileActivityCard({ onSeeAll, limit = 3 }: MobileActivityCardPr
 
       {!isConnected && (
         <div className="text-center text-[var(--fg-3)] text-[13px]" style={{ padding: '16px 0' }}>
-          Conecte sua carteira para ver suas movimentações.
+          Entre na sua conta para ver suas movimentações.
         </div>
       )}
       {isConnected && payments === null && <MobileSkeleton count={limit} />}

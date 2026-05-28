@@ -236,7 +236,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const signTransaction = useCallback(async (xdr: string): Promise<string> => {
     const keypair = keypairRef.current;
-    if (!keypair) throw new Error('Carteira não conectada');
+    if (!keypair) throw new Error('Você precisa estar logado para continuar.');
     const tx = TransactionBuilder.fromXDR(xdr, NETWORK_PASSPHRASE);
     tx.sign(keypair);
     return tx.toXDR();

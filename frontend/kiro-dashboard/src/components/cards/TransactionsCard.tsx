@@ -41,7 +41,7 @@ export function TransactionsCard({ onSeeAll }: TransactionsCardProps) {
 
       <div className="flex flex-col gap-[2px]">
         {!isConnected && (
-          <EmptyState message="Conecte sua carteira para ver suas movimentações." />
+          <EmptyState message="Entre na sua conta para ver suas movimentações." />
         )}
         {isConnected && payments === null && <SkeletonRows count={3} />}
         {isConnected && payments && payments.length === 0 && (

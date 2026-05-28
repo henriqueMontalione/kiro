@@ -31,7 +31,7 @@ export default function Recebimentos({ onReceive }: RecebimentosProps) {
         <div>
           <h1 className="k-h1">Recebimentos</h1>
           <div className="text-[13px] text-[var(--fg-3)] mt-1">
-            Pagamentos recebidos na sua carteira KIRO.
+            Pagamentos recebidos na sua conta Kiro.
           </div>
         </div>
         <Button variant="primary" icon={Plus} onClick={onReceive}>
@@ -71,7 +71,7 @@ export default function Recebimentos({ onReceive }: RecebimentosProps) {
         </div>
 
         {!isConnected && (
-          <EmptyState message="Conecte sua carteira para ver seus recebimentos." />
+          <EmptyState message="Entre na sua conta para ver seus recebimentos." />
         )}
         {isConnected && payments === null && <SkeletonList />}
         {isConnected && payments && payments.length === 0 && (
