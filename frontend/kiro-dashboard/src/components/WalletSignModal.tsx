@@ -7,7 +7,8 @@ import { getMe } from '@/lib/api/me';
 
 export function WalletSignModal() {
   const { needsSignatureConfirmation, confirmDerivation, disconnect } = useWallet();
-  const { getAccessToken } = usePrivy();
+  const { getAccessToken, user } = usePrivy();
+  const email = user?.email?.address ?? '';
   const [loggingOut, setLoggingOut] = useState(false);
   const [isReturning, setIsReturning] = useState<boolean | null>(null);
 
@@ -77,6 +78,14 @@ export function WalletSignModal() {
           <h2 className="text-[18px] font-semibold text-[var(--fg-1)]">
             {isReturning === false ? 'Ativar sua conta' : 'Bem-vindo de volta'}
           </h2>
+          {email && (
+            <p
+              className="text-[12px] text-[var(--fg-3)]"
+              style={{ wordBreak: 'break-all' }}
+            >
+              {email}
+            </p>
+          )}
           <p className="text-[13px] text-[var(--fg-2)] leading-relaxed">
             {isReturning === false
               ? 'Para começar a usar o Kiro, precisamos de uma confirmação rápida.'

@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState, type ChangeEvent, type ComponentType, type ReactNode } from 'react';
-import { Camera, Check, Fingerprint, KeyRound, LogOut, Mail, Plus, Trash2, User } from 'lucide-react';
+import { Building2, Camera, Check, Fingerprint, KeyRound, LogOut, Mail, Plus, Trash2, User } from 'lucide-react';
 import { usePrivy, useMfaEnrollment } from '@privy-io/react-auth';
 import { Button } from '@/components/Button';
 import { Card, CardEyebrow } from '@/components/Card';
 import { useUserProfile } from '@/context/UserProfileContext';
 import { useWallet } from '@/context/WalletContext';
+import { formatCnpj } from '@/lib/format';
 import { truncateKey } from '@/lib/stellar';
 import { StatusTag } from '@/components/StatusTag';
 
@@ -213,6 +214,22 @@ export default function Configuracoes() {
               className="bg-transparent border-none outline-none flex-1 font-sans text-[14px] text-[var(--fg-2)] cursor-not-allowed"
             />
           </Field>
+
+          {profile.profile?.cnpj && (
+            <Field
+              label="CNPJ"
+              icon={<Building2 size={14} strokeWidth={1.7} color="var(--fg-3)" />}
+              hint="Para alterar o CNPJ, fale com o suporte."
+            >
+              <input
+                type="text"
+                value={formatCnpj(profile.profile.cnpj)}
+                readOnly
+                tabIndex={-1}
+                className="bg-transparent border-none outline-none flex-1 font-sans text-[14px] text-[var(--fg-2)] cursor-not-allowed"
+              />
+            </Field>
+          )}
         </div>
 
         <div
