@@ -1,5 +1,6 @@
-import { useRef, useState, type ChangeEvent, type ReactNode } from 'react';
-import { Camera, Check, LogOut, Mail, Trash2, User } from 'lucide-react';
+import { useRef, useState, type ChangeEvent, type ComponentType, type ReactNode } from 'react';
+import { Camera, Check, Fingerprint, KeyRound, LogOut, Mail, Plus, Trash2, User } from 'lucide-react';
+import { usePrivy, useMfaEnrollment } from '@privy-io/react-auth';
 import { Button } from '@/components/Button';
 import { Card, CardEyebrow } from '@/components/Card';
 import { useUserProfile } from '@/context/UserProfileContext';
@@ -231,6 +232,8 @@ export default function Configuracoes() {
         </div>
       </Card>
 
+      <SecurityCard />
+
       <Card>
         <CardEyebrow>Sessão</CardEyebrow>
         <div className="flex items-center justify-between gap-4 flex-wrap">
@@ -258,6 +261,147 @@ export default function Configuracoes() {
           </button>
         </div>
       </Card>
+    </div>
+  );
+}
+
+type MfaMethod = 'passkey' | 'totp';
+
+interface MfaMethodMeta {
+  key: MfaMethod;
+  label: string;
+  sublabel: string;
+  icon: ComponentType<{ size?: number; strokeWidth?: number; color?: string }>;
+}
+
+const MFA_METHOD_META: Record<MfaMethod, MfaMethodMeta> = {
+  passkey: {
+    key: 'passkey',
+    label: 'Digital ou reconhecimento facial',
+    sublabel: 'Use a biometria do seu celular ou computador',
+    icon: Fingerprint,
+  },
+  totp: {
+    key: 'totp',
+    label: 'Código de um aplicativo',
+    sublabel: 'Geramos um código de 6 dígitos a cada login',
+    icon: KeyRound,
+  },
+};
+
+function SecurityCard() {
+  const { user } = usePrivy();
+  const {
+    showMfaEnrollmentModal,
+    unenrollWithPasskey,
+    unenrollWithTotp,
+  } = useMfaEnrollment();
+  const [removing, setRemoving] = useState<MfaMethod | null>(null);
+
+  const enrolledMethods = (user?.mfaMethods ?? []).filter(
+    (m): m is MfaMethod => m === 'passkey' || m === 'totp',
+  );
+
+  async function handleRemove(method: MfaMethod) {
+    if (removing) return;
+    const ok = window.confirm(
+      `Remover ${MFA_METHOD_META[method].label} da sua conta? Você poderá adicionar de novo a qualquer momento.`,
+    );
+    if (!ok) return;
+    setRemoving(method);
+    try {
+      if (method === 'passkey') await unenrollWithPasskey();
+      else await unenrollWithTotp();
+    } catch (err) {
+      console.warn('[Security] unenroll failed:', err);
+      window.alert('Não conseguimos remover esse método. Tente novamente.');
+    } finally {
+      setRemoving(null);
+    }
+  }
+
+  return (
+    <Card>
+      <CardEyebrow>Segurança</CardEyebrow>
+      <div className="flex flex-col gap-4">
+        <p className="text-[13px] text-[var(--fg-3)] leading-relaxed">
+          A verificação em duas etapas é opcional. Recomendamos usar sua digital
+          ou rosto pra entrar — é mais rápido e seguro do que digitar um código.
+        </p>
+
+        {enrolledMethods.length === 0 ? (
+          <div
+            className="text-[13px] text-[var(--fg-2)] rounded-[var(--radius-md)] border border-[var(--stroke-3)] bg-[var(--bg-3)]"
+            style={{ padding: '12px 14px' }}
+          >
+            Nenhum método de verificação ativo.
+          </div>
+        ) : (
+          <ul className="flex flex-col gap-2 list-none m-0 p-0">
+            {enrolledMethods.map((m) => (
+              <li key={m}>
+                <MfaRow
+                  meta={MFA_METHOD_META[m]}
+                  onRemove={() => handleRemove(m)}
+                  removing={removing === m}
+                />
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <div className="flex justify-end">
+          <Button variant="secondary" icon={Plus} onClick={showMfaEnrollmentModal}>
+            Adicionar método
+          </Button>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function MfaRow({
+  meta,
+  onRemove,
+  removing,
+}: {
+  meta: MfaMethodMeta;
+  onRemove: () => void;
+  removing: boolean;
+}) {
+  const Icon = meta.icon;
+  return (
+    <div
+      className="flex items-center justify-between gap-3 rounded-[var(--radius-md)] border border-[var(--stroke-3)] bg-[var(--bg-3)]"
+      style={{ padding: '12px 14px' }}
+    >
+      <div className="flex items-center gap-3 min-w-0">
+        <div
+          className="flex items-center justify-center rounded-[10px] flex-shrink-0"
+          style={{
+            width: 36,
+            height: 36,
+            background: 'rgba(0,255,135,0.10)',
+            color: 'var(--kiro-green)',
+          }}
+        >
+          <Icon size={18} strokeWidth={1.7} />
+        </div>
+        <div className="flex flex-col min-w-0">
+          <span className="text-[14px] text-[var(--fg-1)] font-medium">{meta.label}</span>
+          <span className="text-[12px] text-[var(--fg-3)] truncate">{meta.sublabel}</span>
+        </div>
+      </div>
+      <button
+        type="button"
+        onClick={onRemove}
+        disabled={removing}
+        className="inline-flex items-center gap-[6px] bg-transparent border-none cursor-pointer text-[12px] text-[var(--fg-3)] hover:text-[#FF4D6D] transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+        style={{ padding: '4px 8px' }}
+      >
+        <Trash2 size={12} strokeWidth={1.7} />
+        {removing ? 'Removendo...' : 'Remover'}
+      </button>
     </div>
   );
 }

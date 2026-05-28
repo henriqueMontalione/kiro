@@ -8,7 +8,6 @@ import { QuoteProvider } from './context/QuoteContext';
 import { NotificationsProvider } from './context/NotificationsContext';
 import { UserProfileProvider } from './context/UserProfileContext';
 import { TransactionsProvider } from './context/TransactionsContext';
-import { MfaGuard } from './components/MfaGuard';
 import './index.css';
 
 const PRIVY_APP_ID = import.meta.env.VITE_PRIVY_APP_ID as string;
@@ -33,7 +32,6 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
         },
       }}
     >
-      <MfaGuard />
       <BrowserRouter>
         <WalletProvider>
           <UserProfileProvider>
