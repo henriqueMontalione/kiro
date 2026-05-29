@@ -100,3 +100,31 @@ func (q *Queries) SumFeesByUserID(ctx context.Context, userID uuid.UUID) (int64,
 	err := q.db.QueryRow(ctx, sumFeesByUserID, userID).Scan(&total)
 	return total, err
 }
+
+const listAllTransactionsByUserID = `-- name: ListAllTransactionsByUserID :many
+SELECT id, user_id, direction, tesouro_amount, brl_amount, fee_brl_amount, stellar_tx_hash, etherfuse_order_id, status, created_at
+FROM transactions
+WHERE user_id = $1
+ORDER BY created_at DESC
+`
+
+func (q *Queries) ListAllTransactionsByUserID(ctx context.Context, userID uuid.UUID) ([]Transaction, error) {
+	rows, err := q.db.Query(ctx, listAllTransactionsByUserID, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	items := []Transaction{}
+	for rows.Next() {
+		var t Transaction
+		if err := rows.Scan(
+			&t.ID, &t.UserID, &t.Direction, &t.TesouroAmount, &t.BrlAmount, &t.FeeBrlAmount,
+			&t.StellarTxHash, &t.EtherfuseOrderID, &t.Status, &t.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, t)
+	}
+	return items, rows.Err()
+}
