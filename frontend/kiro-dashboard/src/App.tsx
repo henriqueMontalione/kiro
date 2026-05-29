@@ -16,6 +16,7 @@ import Resumo from '@/pages/Resumo';
 import Transacoes from '@/pages/Transacoes';
 import Recebimentos from '@/pages/Recebimentos';
 import Configuracoes from '@/pages/Configuracoes';
+import MobileMais from '@/pages/MobileMais';
 import Placeholder from '@/pages/Placeholder';
 
 /**
@@ -77,7 +78,7 @@ export default function App() {
               <Route path="/relatorios" element={<Placeholder name="Relatórios" />} />
               <Route path="/integracoes" element={<Placeholder name="Integrações" />} />
               <Route path="/config" element={<RequireAuth><Configuracoes /></RequireAuth>} />
-              <Route path="/mais" element={<Placeholder name="Mais" />} />
+              <Route path="/mais" element={<MobileMais />} />
               <Route path="*" element={<Navigate to="/resumo" replace />} />
             </Routes>
           </div>
