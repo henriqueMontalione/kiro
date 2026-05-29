@@ -115,6 +115,34 @@ func (s *Server) createTransaction(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, toTransactionResponse(tx))
 }
 
+func (s *Server) getTotalFees(w http.ResponseWriter, r *http.Request) {
+	identity := identityFrom(r.Context())
+	if identity == nil {
+		writeError(w, http.StatusUnauthorized, "Não autorizado")
+		return
+	}
+
+	user, err := s.queries.GetUserByPrivyID(r.Context(), identity.DID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		writeError(w, http.StatusNotFound, "Cadastro não encontrado")
+		return
+	}
+	if err != nil {
+		s.logger.Printf("getTotalFees lookup user: %v", err)
+		writeError(w, http.StatusInternalServerError, "Erro interno")
+		return
+	}
+
+	total, err := s.queries.SumFeesByUserID(r.Context(), user.ID)
+	if err != nil {
+		s.logger.Printf("getTotalFees sum: %v", err)
+		writeError(w, http.StatusInternalServerError, "Erro interno")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]int64{"total_fee_brl_amount": total})
+}
+
 func (s *Server) listTransactions(w http.ResponseWriter, r *http.Request) {
 	identity := identityFrom(r.Context())
 	if identity == nil {

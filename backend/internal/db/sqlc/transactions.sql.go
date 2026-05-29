@@ -88,3 +88,15 @@ func (q *Queries) ListTransactionsByUserID(ctx context.Context, arg ListTransact
 	}
 	return items, rows.Err()
 }
+
+const sumFeesByUserID = `-- name: SumFeesByUserID :one
+SELECT COALESCE(SUM(fee_brl_amount), 0)::BIGINT AS total_fee_brl
+FROM transactions
+WHERE user_id = $1 AND status = 'completed'
+`
+
+func (q *Queries) SumFeesByUserID(ctx context.Context, userID uuid.UUID) (int64, error) {
+	var total int64
+	err := q.db.QueryRow(ctx, sumFeesByUserID, userID).Scan(&total)
+	return total, err
+}

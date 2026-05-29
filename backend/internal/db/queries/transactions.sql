@@ -12,3 +12,8 @@ FROM transactions
 WHERE user_id = $1
 ORDER BY created_at DESC
 LIMIT $2;
+
+-- name: SumFeesByUserID :one
+SELECT COALESCE(SUM(fee_brl_amount), 0)::BIGINT AS total_fee_brl
+FROM transactions
+WHERE user_id = $1 AND status = 'completed';
