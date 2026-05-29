@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { X, ChevronLeft, ChevronRight, Loader2, CheckCircle, AlertCircle, Copy, Check, ExternalLink } from 'lucide-react';
+import { X, ChevronLeft, ChevronRight, Loader2, CheckCircle, AlertCircle, Copy, Check, ExternalLink, Info } from 'lucide-react';
 import { Button } from './Button';
 import { TestnetHint } from './TestnetHint';
+import { TesouroInfoModal } from './TesouroInfoModal';
 import { useWallet } from '@/context/WalletContext';
 import { formatBRL, submitXdr } from '@/lib/stellar';
 import { usePrivy } from '@privy-io/react-auth';
@@ -13,6 +14,7 @@ import {
   getBankAccounts,
   getOnRampQuote,
   createOnRampOrder,
+  simulateOnRampPayment,
   getOnRampOrder,
   regenerateClaimXdr,
   sandboxApprove,
@@ -59,6 +61,7 @@ export function ReceberPixModal({ open, onClose }: ReceberPixModalProps) {
   const [copied, setCopied] = useState(false);
   const [isSandboxApproving, setIsSandboxApproving] = useState(false);
   const [claimingMsg, setClaimingMsg] = useState('');
+  const [tesouroInfoOpen, setTesouroInfoOpen] = useState(false);
 
   const kycPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const orderPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -329,14 +332,13 @@ export function ReceberPixModal({ open, onClose }: ReceberPixModalProps) {
       setOrder(o);
       setStep('pix');
       startOrderPolling(o.orderId);
-
-      // Disabled while Etherfuse sandbox investigation is open: orders get
-      // stuck in "processing" after /fiat_received fires. Re-enable later.
-      // if (SANDBOX_ENABLED) {
-      //   simulateOnRampPayment(o.orderId).catch((err) => {
-      //     console.warn('[ReceberPixModal] simulateOnRampPayment failed:', err);
-      //   });
-      // }
+      if (SANDBOX_ENABLED) {
+        setTimeout(() => {
+          simulateOnRampPayment(o.orderId).catch((err) => {
+            console.warn('[ReceberPixModal] simulateOnRampPayment failed:', err);
+          });
+        }, 4000);
+      }
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : 'Erro ao criar ordem');
       setStep('error');
@@ -441,6 +443,7 @@ export function ReceberPixModal({ open, onClose }: ReceberPixModalProps) {
     : '';
 
   return (
+    <>
     <div
       onClick={handleClose}
       className="fixed inset-0 z-[100] flex items-center justify-center p-3 md:p-6"
@@ -630,11 +633,25 @@ export function ReceberPixModal({ open, onClose }: ReceberPixModalProps) {
                   {formatBRL(quote.sourceAmount)}
                 </span>
               </div>
-              <div className="flex justify-between items-center">
+              <div className="flex justify-between items-start">
                 <span className="text-[13px] text-[var(--fg-3)]">Você recebe</span>
-                <span className="text-[18px] font-semibold" style={{ color: 'var(--kiro-green)' }}>
-                  {parseFloat(quote.destinationAmount).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 4 })} TESOURO
-                </span>
+                <div className="flex flex-col items-end gap-[2px]">
+                  <span className="flex items-center gap-1.5 text-[18px] font-semibold" style={{ color: 'var(--kiro-green)' }}>
+                    {parseFloat(quote.destinationAmount).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} TESOURO
+                    <button
+                      type="button"
+                      onClick={() => setTesouroInfoOpen(true)}
+                      className="flex items-center justify-center cursor-pointer"
+                      style={{ background: 'none', border: 'none', padding: 0, color: 'var(--fg-3)' }}
+                      aria-label="O que é TESOURO?"
+                    >
+                      <Info size={14} strokeWidth={1.8} />
+                    </button>
+                  </span>
+                  <span className="text-[12px] text-[var(--fg-3)]">
+                    ≈ {formatBRL((parseFloat(quote.sourceAmount) - parseFloat(quote.fee)).toFixed(2))}
+                  </span>
+                </div>
               </div>
               <div className="h-px" style={{ background: 'var(--stroke-3)' }} />
               <div className="flex justify-between items-center">
@@ -773,5 +790,7 @@ export function ReceberPixModal({ open, onClose }: ReceberPixModalProps) {
         )}
       </div>
     </div>
+    <TesouroInfoModal open={tesouroInfoOpen} onClose={() => setTesouroInfoOpen(false)} />
+    </>
   );
 }
