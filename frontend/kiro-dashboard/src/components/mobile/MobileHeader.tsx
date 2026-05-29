@@ -3,6 +3,7 @@ import { Bell } from 'lucide-react';
 import { NotificationsPopover } from '../NotificationsPopover';
 import { UserMenu } from '../UserMenu';
 import { WalletButtonMobile } from '../WalletButton';
+import { KiroLogo } from '../KiroLogo';
 import { useUserProfile } from '@/context/UserProfileContext';
 import { useWallet } from '@/context/WalletContext';
 import { useNotifications } from '@/context/NotificationsContext';
@@ -50,14 +51,7 @@ export function MobileHeader() {
           </div>
         </div>
       ) : (
-        <div className="flex flex-col leading-tight min-w-0">
-          <span className="text-[15px] text-[var(--fg-1)] font-display font-semibold">
-            KIRO
-          </span>
-          <span className="text-[12px] text-[var(--fg-3)] font-sans">
-            Entre na sua conta
-          </span>
-        </div>
+        <KiroLogo size={18} />
       )}
 
       <div className="flex items-center">
