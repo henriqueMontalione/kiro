@@ -8,7 +8,6 @@ import { QuoteProvider } from './context/QuoteContext';
 import { NotificationsProvider } from './context/NotificationsContext';
 import { UserProfileProvider } from './context/UserProfileContext';
 import { TransactionsProvider } from './context/TransactionsContext';
-import { EtherfuseKycProvider } from './context/EtherfuseKycContext';
 import './index.css';
 
 const PRIVY_APP_ID = import.meta.env.VITE_PRIVY_APP_ID as string;
@@ -37,17 +36,15 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
       <BrowserRouter>
         <WalletProvider>
           <UserProfileProvider>
-            <EtherfuseKycProvider>
-              <TransactionsProvider>
-                <DashboardProvider>
-                  <QuoteProvider>
-                    <NotificationsProvider>
-                      <App />
-                    </NotificationsProvider>
-                  </QuoteProvider>
-                </DashboardProvider>
-              </TransactionsProvider>
-            </EtherfuseKycProvider>
+            <TransactionsProvider>
+              <DashboardProvider>
+                <QuoteProvider>
+                  <NotificationsProvider>
+                    <App />
+                  </NotificationsProvider>
+                </QuoteProvider>
+              </DashboardProvider>
+            </TransactionsProvider>
           </UserProfileProvider>
         </WalletProvider>
       </BrowserRouter>

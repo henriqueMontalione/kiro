@@ -1,7 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { useWallet } from '@/context/WalletContext';
-import { useEtherfuseKyc } from '@/context/EtherfuseKycContext';
 import { Sidebar } from '@/components/Sidebar';
 import { Header } from '@/components/Header';
 import { MobileHeader } from '@/components/mobile/MobileHeader';
@@ -10,10 +9,6 @@ import { ReceberPixModal } from '@/components/ReceberPixModal';
 import { SacarPixModal } from '@/components/SacarPixModal';
 import { WalletSignModal } from '@/components/WalletSignModal';
 import { CompleteOnboardingModal } from '@/components/CompleteOnboardingModal';
-import { EtherfuseConsentModal } from '@/components/EtherfuseConsentModal';
-import { EtherfuseKycIdentityModal } from '@/components/EtherfuseKycIdentityModal';
-import { EtherfuseKycDocsModal } from '@/components/EtherfuseKycDocsModal';
-import { EtherfuseKycReviewModal } from '@/components/EtherfuseKycReviewModal';
 import Resumo from '@/pages/Resumo';
 // On /resumo, "Receber via PIX" triggers the off-ramp flow (TESOURO → BRL).
 // On /recebimentos, the same prop name still means "receive a customer payment"
@@ -36,14 +31,12 @@ import Placeholder from '@/pages/Placeholder';
  * can open it via the `onReceive` prop.
  */
 export default function App() {
-  const { phase, startFlow: startKycFlow } = useEtherfuseKyc();
-
   const [pixOpen, setPixOpen] = useState(false);
-  const openPix = () => { if (phase !== 'approved') { startKycFlow(); return; } setPixOpen(true); };
+  const openPix = () => setPixOpen(true);
   const closePix = () => setPixOpen(false);
 
   const [sacarOpen, setSacarOpen] = useState(false);
-  const openSacar = () => { if (phase !== 'approved') { startKycFlow(); return; } setSacarOpen(true); };
+  const openSacar = () => setSacarOpen(true);
   const closeSacar = () => setSacarOpen(false);
 
   return (
@@ -100,10 +93,6 @@ export default function App() {
       <SacarPixModal open={sacarOpen} onClose={closeSacar} />
       <WalletSignModal />
       <CompleteOnboardingModal />
-      <EtherfuseConsentModal />
-      <EtherfuseKycIdentityModal />
-      <EtherfuseKycDocsModal />
-      <EtherfuseKycReviewModal />
     </div>
   );
 }

@@ -1,20 +1,21 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { X, ChevronLeft, ChevronRight, Loader2, CheckCircle, AlertCircle, Copy, Check, Info } from 'lucide-react';
+import { X, ChevronLeft, ChevronRight, Loader2, CheckCircle, AlertCircle, Copy, Check, ExternalLink } from 'lucide-react';
 import { Button } from './Button';
+import { TestnetHint } from './TestnetHint';
 import { useWallet } from '@/context/WalletContext';
 import { formatBRL, submitXdr } from '@/lib/stellar';
 import { usePrivy } from '@privy-io/react-auth';
 import { createTransaction, tesouroToStroops } from '@/lib/api/transactions';
 import { useTransactions } from '@/context/TransactionsContext';
-import { TesouroInfoModal } from './TesouroInfoModal';
 import {
+  startOnboarding,
+  getKycStatus,
   getBankAccounts,
   getOnRampQuote,
   createOnRampOrder,
   getOnRampOrder,
   regenerateClaimXdr,
   sandboxApprove,
-  simulateOnRampPayment,
   type OnRampQuoteResult,
   type OnRampOrderResult,
 } from '@/lib/anchors/etherfuse/client';
@@ -24,6 +25,9 @@ const SANDBOX_ENABLED = import.meta.env.VITE_ETHERFUSE_SANDBOX === 'true';
 type Step =
   | 'loading'
   | 'no_wallet'
+  | 'kyc'
+  | 'kyc_review'
+  | 'kyc_rejected'
   | 'amount'
   | 'confirm'
   | 'pix'
@@ -31,6 +35,8 @@ type Step =
   | 'done'
   | 'error';
 
+// Same localStorage keys as SacarPixModal — KYC + bank account are shared
+// across on-ramp and off-ramp for the same wallet.
 const CUSTOMER_KEY = 'kiro_ef_customer_id';
 const BANK_ACCOUNT_KEY = 'kiro_ef_bank_account_id';
 
@@ -45,14 +51,16 @@ export function ReceberPixModal({ open, onClose }: ReceberPixModalProps) {
   const { refresh: refreshTxs } = useTransactions();
 
   const [step, setStep] = useState<Step>('loading');
+  const [kycUrl, setKycUrl] = useState('');
   const [amount, setAmount] = useState('');
   const [quote, setQuote] = useState<OnRampQuoteResult | null>(null);
   const [order, setOrder] = useState<OnRampOrderResult | null>(null);
   const [errorMsg, setErrorMsg] = useState('');
   const [copied, setCopied] = useState(false);
+  const [isSandboxApproving, setIsSandboxApproving] = useState(false);
   const [claimingMsg, setClaimingMsg] = useState('');
-  const [yieldInfoOpen, setYieldInfoOpen] = useState(false);
 
+  const kycPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const orderPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const cancelRef = useRef(false);
   const customerIdRef = useRef('');
@@ -66,8 +74,28 @@ export function ReceberPixModal({ open, onClose }: ReceberPixModalProps) {
   }, [open]);
 
   const stopPolls = useCallback(() => {
+    if (kycPollRef.current) { clearInterval(kycPollRef.current); kycPollRef.current = null; }
     if (orderPollRef.current) { clearInterval(orderPollRef.current); orderPollRef.current = null; }
   }, []);
+
+  const startKycPolling = useCallback(
+    (customerId: string, pubkey: string) => {
+      stopPolls();
+      kycPollRef.current = setInterval(async () => {
+        try {
+          const status = await getKycStatus(customerId, pubkey);
+          if (status === 'approved') {
+            stopPolls();
+            setStep('amount');
+          } else if (status === 'rejected') {
+            stopPolls();
+            setStep('kyc_rejected');
+          }
+        } catch { /* transient */ }
+      }, 5000);
+    },
+    [stopPolls],
+  );
 
   const startOrderPolling = useCallback(
     (orderId: string) => {
@@ -75,8 +103,23 @@ export function ReceberPixModal({ open, onClose }: ReceberPixModalProps) {
       orderPollRef.current = setInterval(async () => {
         try {
           const result = await getOnRampOrder(orderId);
+          // Only `completed` means the crypto is delivered and the claim XDR
+          // (if any) is ready. `funded` is the intermediate "processing" state
+          // — fiat received but claimable balance not yet created. Keep
+          // polling through `funded` until completion.
           if (result.status === 'completed') {
             stopPolls();
+            // First-time Stellar wallets without a TESOURO trustline receive
+            // the tokens via a claimable balance — Etherfuse hands us an XDR
+            // that does ChangeTrust + ClaimClaimableBalance in one tx. We
+            // sign it with the passkey and submit to Horizon.
+            //
+            // The order GET sometimes returns `stellarClaimTransaction: null`
+            // even though a claim is needed (observed with sandbox
+            // simulate-deposit). Fall back to /regenerate_tx, which rebuilds
+            // and returns a fresh claim XDR synchronously. If the regenerate
+            // call also returns null OR errors, assume the wallet already had
+            // a trustline (no claim needed) and finish.
             let claimXdr = result.stellarClaimTransaction;
             if (!claimXdr) {
               try {
@@ -130,55 +173,89 @@ export function ReceberPixModal({ open, onClose }: ReceberPixModalProps) {
     [stopPolls, refreshBalance, signTransaction],
   );
 
-  const startFlow = useCallback(async () => {
-    setStep('loading');
-    cancelRef.current = false;
-    stopPolls();
+  const startFlow = useCallback(
+    async (pubkey: string) => {
+      setStep('loading');
+      cancelRef.current = false;
+      stopPolls();
 
-    const customerId = localStorage.getItem(CUSTOMER_KEY) ?? '';
-    let bankAccId = localStorage.getItem(BANK_ACCOUNT_KEY) ?? '';
+      let customerId = localStorage.getItem(CUSTOMER_KEY) ?? '';
+      let bankAccId = localStorage.getItem(BANK_ACCOUNT_KEY) ?? '';
 
-    if (!customerId) {
-      setErrorMsg('Complete a verificação de identidade antes de receber.');
-      setStep('error');
-      return;
-    }
-
-    customerIdRef.current = customerId;
-
-    try {
-      const accounts = await getBankAccounts(customerId);
-      if (accounts.length > 0) {
-        bankAccId = accounts[0].id;
-        localStorage.setItem(BANK_ACCOUNT_KEY, bankAccId);
-      }
-    } catch {
-      // Non-fatal: use stored ID. If it's stale the order creation will fail
-      // with a clear error rather than silently misbehaving.
-    }
-
-    if (!bankAccId) {
-      setErrorMsg('Conta de pagamento não encontrada. Refaça o cadastro de verificação.');
-      setStep('error');
-      return;
-    }
-
-    bankAccountIdRef.current = bankAccId;
-
-    // Sandbox: re-run the bypass to ensure agreements are accepted and the PIX
-    // proxy account is provisioned. Idempotent on Etherfuse's side. Without
-    // this, /ramp/order rejects with "Proxy account not found" when the user
-    // finished docs without the bypass having been called (e.g. older session).
-    if (SANDBOX_ENABLED && publicKey) {
       try {
-        await sandboxApprove(customerId, publicKey, bankAccId);
-      } catch (err) {
-        console.warn('[ReceberPixModal] sandboxApprove failed:', err);
-      }
-    }
+        if (customerId && bankAccId) {
+          const kycStatus = await getKycStatus(customerId, pubkey);
 
-    setStep('amount');
-  }, [stopPolls]);
+          if (kycStatus === 'approved') {
+            try {
+              const accounts = await getBankAccounts(customerId);
+              if (accounts.length > 0) {
+                bankAccId = accounts[0].id;
+                localStorage.setItem(BANK_ACCOUNT_KEY, bankAccId);
+              }
+            } catch { /* keep stored ID */ }
+            customerIdRef.current = customerId;
+            bankAccountIdRef.current = bankAccId;
+            setStep('amount');
+            return;
+          }
+          if (kycStatus === 'pending') {
+            customerIdRef.current = customerId;
+            bankAccountIdRef.current = bankAccId;
+            setStep('kyc_review');
+            startKycPolling(customerId, pubkey);
+            return;
+          }
+          if (kycStatus === 'rejected') {
+            setStep('kyc_rejected');
+            return;
+          }
+        }
+
+        if (!customerId) customerId = crypto.randomUUID();
+        if (!bankAccId) bankAccId = crypto.randomUUID();
+
+        const result = await startOnboarding(customerId, bankAccId, pubkey);
+        customerId = result.customerId;
+        bankAccId = result.bankAccountId;
+        localStorage.setItem(CUSTOMER_KEY, customerId);
+        localStorage.setItem(BANK_ACCOUNT_KEY, bankAccId);
+        window.dispatchEvent(new Event('kiro:customerIdReady'));
+        customerIdRef.current = customerId;
+        bankAccountIdRef.current = bankAccId;
+
+        const kycStatus = await getKycStatus(customerId, pubkey);
+        if (kycStatus === 'approved') {
+          try {
+            const accounts = await getBankAccounts(customerId);
+            if (accounts.length > 0) {
+              bankAccountIdRef.current = accounts[0].id;
+              localStorage.setItem(BANK_ACCOUNT_KEY, accounts[0].id);
+            }
+          } catch { /* keep */ }
+          setStep('amount');
+          return;
+        }
+        if (kycStatus === 'pending') {
+          setStep('kyc_review');
+          startKycPolling(customerId, pubkey);
+          return;
+        }
+        if (kycStatus === 'rejected') {
+          setStep('kyc_rejected');
+          return;
+        }
+
+        setKycUrl(result.kycUrl);
+        setStep('kyc');
+        startKycPolling(customerId, pubkey);
+      } catch (err) {
+        setErrorMsg(err instanceof Error ? err.message : 'Erro ao verificar identidade');
+        setStep('error');
+      }
+    },
+    [stopPolls, startKycPolling],
+  );
 
   useEffect(() => {
     if (!open) {
@@ -196,13 +273,13 @@ export function ReceberPixModal({ open, onClose }: ReceberPixModalProps) {
       setStep('no_wallet');
       return;
     }
-    startFlow();
+    startFlow(publicKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   useEffect(() => {
     if (open && isConnected && publicKey && step === 'no_wallet') {
-      startFlow();
+      startFlow(publicKey);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isConnected, publicKey]);
@@ -225,6 +302,13 @@ export function ReceberPixModal({ open, onClose }: ReceberPixModalProps) {
     }
   }
 
+  /**
+   * Wraps `getOnRampQuote` with one retry path for the sandbox bypass: if
+   * Etherfuse rejects the quote because agreements were not accepted (which
+   * happens when KYC was approved programmatically, skipping the hosted UI's
+   * terms-and-conditions screen), call `sandboxApprove` to retroactively
+   * accept them and try the quote again. Only runs in sandbox builds.
+   */
   async function tryQuoteWithSandboxRecovery(num: number) {
     try {
       return await getOnRampQuote(customerIdRef.current, num.toFixed(2), publicKey ?? undefined);
@@ -245,13 +329,14 @@ export function ReceberPixModal({ open, onClose }: ReceberPixModalProps) {
       setOrder(o);
       setStep('pix');
       startOrderPolling(o.orderId);
-      if (SANDBOX_ENABLED) {
-        setTimeout(() => {
-          simulateOnRampPayment(o.orderId).catch((err) => {
-            console.warn('[ReceberPixModal] simulateOnRampPayment failed:', err);
-          });
-        }, 4000);
-      }
+
+      // Disabled while Etherfuse sandbox investigation is open: orders get
+      // stuck in "processing" after /fiat_received fires. Re-enable later.
+      // if (SANDBOX_ENABLED) {
+      //   simulateOnRampPayment(o.orderId).catch((err) => {
+      //     console.warn('[ReceberPixModal] simulateOnRampPayment failed:', err);
+      //   });
+      // }
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : 'Erro ao criar ordem');
       setStep('error');
@@ -267,6 +352,76 @@ export function ReceberPixModal({ open, onClose }: ReceberPixModalProps) {
     } catch { /* ignore */ }
   }
 
+  /**
+   * Sandbox-only: posts a dummy ID document to Etherfuse's documents-upload
+   * endpoint, which their sandbox auto-approves immediately (per
+   * docs.etherfuse.com/api-reference/kyc/upload-kyc-documents). Skips the
+   * human-review queue that sandbox uses for hosted-UI submissions.
+   * Backend gate ensures this no-ops in production.
+   */
+  async function handleSandboxApprove() {
+    if (!publicKey || !customerIdRef.current) return;
+    setIsSandboxApproving(true);
+    setErrorMsg('');
+    try {
+      // Trust the upload response — getKycStatus has propagation lag and
+      // would still report "proposed" right after this call returns.
+      const status = await sandboxApprove(
+        customerIdRef.current,
+        publicKey,
+        bankAccountIdRef.current,
+      );
+      if (status === 'approved') {
+        stopPolls();
+        try {
+          const accounts = await getBankAccounts(customerIdRef.current);
+          if (accounts.length > 0) {
+            bankAccountIdRef.current = accounts[0].id;
+            localStorage.setItem(BANK_ACCOUNT_KEY, accounts[0].id);
+          }
+        } catch { /* keep current ID */ }
+        setStep('amount');
+      } else if (status === 'rejected') {
+        stopPolls();
+        setStep('kyc_rejected');
+      }
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Erro no sandbox approve');
+      setStep('error');
+    } finally {
+      setIsSandboxApproving(false);
+    }
+  }
+
+  /**
+   * Re-open the KYC form when stuck on the "em análise" screen. Etherfuse
+   * returns `pending` both for genuinely-under-review customers AND for
+   * customers who started but never finished the form — we can't tell them
+   * apart, so we give the user a way back to the iframe either way.
+   */
+  async function resumeKyc() {
+    if (!publicKey || !customerIdRef.current) return;
+    setErrorMsg('');
+    setStep('loading');
+    try {
+      const result = await startOnboarding(
+        customerIdRef.current,
+        bankAccountIdRef.current,
+        publicKey,
+      );
+      customerIdRef.current = result.customerId;
+      bankAccountIdRef.current = result.bankAccountId;
+      localStorage.setItem(CUSTOMER_KEY, result.customerId);
+      localStorage.setItem(BANK_ACCOUNT_KEY, result.bankAccountId);
+      window.dispatchEvent(new Event('kiro:customerIdReady'));
+      setKycUrl(result.kycUrl);
+      setStep('kyc');
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Erro ao reabrir cadastro');
+      setStep('error');
+    }
+  }
+
   function handleClose() {
     stopPolls();
     cancelRef.current = true;
@@ -275,6 +430,9 @@ export function ReceberPixModal({ open, onClose }: ReceberPixModalProps) {
 
   if (!open) return null;
 
+  // `amount` is stored as a digit-only string of cents (e.g. "10000" → R$ 100,00)
+  // so the input always shows a valid BRL formatting and the user never has
+  // to type the decimal separator.
   const amountCents = parseInt(amount.replace(/\D/g, ''), 10);
   const amountNum = isNaN(amountCents) ? 0 : amountCents / 100;
   const amountValid = amountNum > 0;
@@ -283,7 +441,6 @@ export function ReceberPixModal({ open, onClose }: ReceberPixModalProps) {
     : '';
 
   return (
-    <>
     <div
       onClick={handleClose}
       className="fixed inset-0 z-[100] flex items-center justify-center p-3 md:p-6"
@@ -328,6 +485,92 @@ export function ReceberPixModal({ open, onClose }: ReceberPixModalProps) {
             <Button variant="primary" size="lg" onClick={() => connect()} className="w-full justify-center">
               Entrar
             </Button>
+          </div>
+        )}
+
+        {step === 'kyc' && (
+          <div className="flex flex-col gap-3">
+            <p className="text-[14px] text-[var(--fg-2)] leading-relaxed">
+              Complete o cadastro abaixo para receber via PIX.
+            </p>
+
+            <TestnetHint onSkip={handleSandboxApprove} skipping={isSandboxApproving} />
+
+            <button
+              type="button"
+              onClick={() => window.open(kycUrl, '_blank', 'noopener,noreferrer')}
+              className="inline-flex items-center justify-center gap-2 w-full font-display font-medium rounded-[var(--radius-md)] cursor-pointer transition-colors hover:bg-white/[0.10]"
+              style={{
+                padding: '10px 16px',
+                fontSize: 13,
+                background: 'rgba(255,255,255,0.06)',
+                color: 'var(--fg-1)',
+                border: '1px solid var(--stroke-3)',
+              }}
+            >
+              <ExternalLink size={14} strokeWidth={1.7} />
+              Abrir cadastro em nova janela
+            </button>
+
+            <div
+              className="rounded-[var(--radius-md)] overflow-hidden border border-[var(--stroke-3)]"
+              style={{ height: 460 }}
+            >
+              <iframe
+                src={kycUrl}
+                className="w-full h-full"
+                sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+                title="Cadastro KYC"
+              />
+            </div>
+            <div className="flex items-center gap-2 text-[12px] text-[var(--fg-3)]">
+              <Loader2 size={13} strokeWidth={1.5} className="animate-spin" />
+              Aguardando aprovação do cadastro...
+            </div>
+          </div>
+        )}
+
+        {step === 'kyc_review' && (
+          <div className="flex flex-col items-center gap-5 py-8 text-center">
+            <Loader2 size={36} strokeWidth={1.4} className="animate-spin" style={{ color: 'var(--kiro-green)' }} />
+            <div>
+              <p className="text-[15px] font-medium text-[var(--fg-1)] mb-1">Cadastro em análise</p>
+              <p className="text-[13px] text-[var(--fg-3)] leading-relaxed">
+                Aguarde a aprovação ou retome o formulário se você não finalizou.
+              </p>
+            </div>
+            <Button variant="secondary" onClick={resumeKyc}>
+              Reabrir cadastro
+            </Button>
+            {SANDBOX_ENABLED && (
+              <button
+                type="button"
+                onClick={handleSandboxApprove}
+                disabled={isSandboxApproving}
+                className="text-[12px] underline-offset-2 hover:underline disabled:opacity-50 cursor-pointer"
+                style={{
+                  color: 'var(--fg-3)',
+                  background: 'transparent',
+                  border: 'none',
+                  padding: 0,
+                }}
+              >
+                {isSandboxApproving ? 'Aprovando...' : 'Pular aprovação (sandbox)'}
+              </button>
+            )}
+          </div>
+        )}
+
+        {step === 'kyc_rejected' && (
+          <div className="flex flex-col items-center gap-5 py-8 text-center">
+            <AlertCircle size={40} strokeWidth={1.4} style={{ color: 'rgba(255,77,109,0.85)' }} />
+            <div>
+              <p className="text-[15px] font-medium text-[var(--fg-1)] mb-1">Cadastro recusado</p>
+              <p className="text-[13px] text-[var(--fg-3)] leading-relaxed">
+                Sua verificação foi recusada. Entre em contato com o suporte para mais informações.
+              </p>
+            </div>
+            <Button variant="secondary" onClick={handleClose}>Fechar</Button>
           </div>
         )}
 
@@ -387,25 +630,11 @@ export function ReceberPixModal({ open, onClose }: ReceberPixModalProps) {
                   {formatBRL(quote.sourceAmount)}
                 </span>
               </div>
-              <div className="flex justify-between items-start">
+              <div className="flex justify-between items-center">
                 <span className="text-[13px] text-[var(--fg-3)]">Você recebe</span>
-                <div className="flex flex-col items-end gap-[2px]">
-                  <span className="flex items-center gap-1.5 text-[18px] font-semibold" style={{ color: 'var(--kiro-green)' }}>
-                    {parseFloat(quote.destinationAmount).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} TESOURO
-                    <button
-                      type="button"
-                      onClick={() => setYieldInfoOpen(true)}
-                      className="flex items-center justify-center cursor-pointer"
-                      style={{ background: 'none', border: 'none', padding: 0, color: 'var(--fg-3)' }}
-                      aria-label="O que é TESOURO?"
-                    >
-                      <Info size={14} strokeWidth={1.8} />
-                    </button>
-                  </span>
-                  <span className="text-[12px] text-[var(--fg-3)]">
-                    ≈ {formatBRL((parseFloat(quote.sourceAmount) - parseFloat(quote.fee)).toFixed(2))}
-                  </span>
-                </div>
+                <span className="text-[18px] font-semibold" style={{ color: 'var(--kiro-green)' }}>
+                  {parseFloat(quote.destinationAmount).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 4 })} TESOURO
+                </span>
               </div>
               <div className="h-px" style={{ background: 'var(--stroke-3)' }} />
               <div className="flex justify-between items-center">
@@ -531,7 +760,7 @@ export function ReceberPixModal({ open, onClose }: ReceberPixModalProps) {
             <div className="flex gap-3 w-full">
               <Button
                 variant="secondary"
-                onClick={() => startFlow()}
+                onClick={() => publicKey && startFlow(publicKey)}
                 className="flex-1 justify-center"
               >
                 Tentar novamente
@@ -544,7 +773,5 @@ export function ReceberPixModal({ open, onClose }: ReceberPixModalProps) {
         )}
       </div>
     </div>
-    <TesouroInfoModal open={yieldInfoOpen} onClose={() => setYieldInfoOpen(false)} />
-    </>
   );
 }

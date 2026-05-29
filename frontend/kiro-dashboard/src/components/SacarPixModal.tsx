@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { X, ChevronLeft, ChevronRight, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
+import { X, ChevronLeft, ChevronRight, Loader2, CheckCircle, AlertCircle, ExternalLink } from 'lucide-react';
 import { Button } from './Button';
+import { TestnetHint } from './TestnetHint';
 import { useWallet } from '@/context/WalletContext';
 import { useQuote } from '@/context/QuoteContext';
 import { formatBRL, submitXdr } from '@/lib/stellar';
@@ -8,6 +9,8 @@ import { usePrivy } from '@privy-io/react-auth';
 import { createTransaction, tesouroToStroops } from '@/lib/api/transactions';
 import { useTransactions } from '@/context/TransactionsContext';
 import {
+  startOnboarding,
+  getKycStatus,
   getBankAccounts,
   getQuote,
   createOrder,
@@ -18,7 +21,17 @@ import {
 
 const SANDBOX_ENABLED = import.meta.env.VITE_ETHERFUSE_SANDBOX === 'true';
 
-type Step = 'loading' | 'no_wallet' | 'amount' | 'confirm' | 'processing' | 'done' | 'error';
+type Step =
+  | 'loading'
+  | 'no_wallet'
+  | 'kyc'
+  | 'kyc_review'
+  | 'kyc_rejected'
+  | 'amount'
+  | 'confirm'
+  | 'processing'
+  | 'done'
+  | 'error';
 
 const CUSTOMER_KEY = 'kiro_ef_customer_id';
 const BANK_ACCOUNT_KEY = 'kiro_ef_bank_account_id';
@@ -35,15 +48,19 @@ export function SacarPixModal({ open, onClose }: SacarPixModalProps) {
   const { refresh: refreshTxs } = useTransactions();
 
   const [step, setStep] = useState<Step>('loading');
+  const [kycUrl, setKycUrl] = useState('');
   const [amount, setAmount] = useState('');
   const [quote, setQuote] = useState<QuoteResult | null>(null);
   const [processingMsg, setProcessingMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
+  const [isSandboxApproving, setIsSandboxApproving] = useState(false);
 
+  const kycPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const cancelRef = useRef(false);
   const customerIdRef = useRef('');
   const bankAccountIdRef = useRef('');
 
+  // ESC closes the modal
   useEffect(() => {
     if (!open) return;
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') handleClose(); };
@@ -51,35 +68,127 @@ export function SacarPixModal({ open, onClose }: SacarPixModalProps) {
     return () => window.removeEventListener('keydown', handler);
   }, [open]);
 
-  const startFlow = useCallback(async () => {
-    setStep('loading');
-    cancelRef.current = false;
-
-    const customerId = localStorage.getItem(CUSTOMER_KEY) ?? '';
-    let bankAccId = localStorage.getItem(BANK_ACCOUNT_KEY) ?? '';
-
-    if (!customerId) {
-      setErrorMsg('Complete a verificação de identidade antes de sacar.');
-      setStep('error');
-      return;
+  const stopKycPolling = useCallback(() => {
+    if (kycPollRef.current) {
+      clearInterval(kycPollRef.current);
+      kycPollRef.current = null;
     }
-
-    customerIdRef.current = customerId;
-
-    try {
-      const accounts = await getBankAccounts(customerId);
-      if (accounts.length > 0) {
-        bankAccId = accounts[0].id;
-        localStorage.setItem(BANK_ACCOUNT_KEY, bankAccId);
-      }
-    } catch { /* keep stored ID */ }
-
-    bankAccountIdRef.current = bankAccId;
-    setStep('amount');
   }, []);
 
+  const startKycPolling = useCallback(
+    (customerId: string, pubkey: string) => {
+      stopKycPolling();
+      kycPollRef.current = setInterval(async () => {
+        try {
+          const status = await getKycStatus(customerId, pubkey);
+          if (status === 'approved') {
+            stopKycPolling();
+            setStep('amount');
+          } else if (status === 'rejected') {
+            stopKycPolling();
+            setStep('kyc_rejected');
+          }
+        } catch { /* ignore transient errors */ }
+      }, 5000);
+    },
+    [stopKycPolling],
+  );
+
+  const startFlow = useCallback(
+    async (pubkey: string) => {
+      setStep('loading');
+      cancelRef.current = false;
+      stopKycPolling();
+
+      let customerId = localStorage.getItem(CUSTOMER_KEY) ?? '';
+      let bankAccId = localStorage.getItem(BANK_ACCOUNT_KEY) ?? '';
+
+      try {
+        // Fast path: if we have stored IDs, check KYC first to skip onboarding when approved.
+        if (customerId && bankAccId) {
+          const kycStatus = await getKycStatus(customerId, pubkey);
+
+          if (kycStatus === 'approved') {
+            try {
+              const accounts = await getBankAccounts(customerId);
+              if (accounts.length > 0) {
+                bankAccId = accounts[0].id;
+                localStorage.setItem(BANK_ACCOUNT_KEY, bankAccId);
+              }
+            } catch { /* keep stored ID */ }
+            customerIdRef.current = customerId;
+            bankAccountIdRef.current = bankAccId;
+            setStep('amount');
+            return;
+          }
+          if (kycStatus === 'pending') {
+            customerIdRef.current = customerId;
+            bankAccountIdRef.current = bankAccId;
+            setStep('kyc_review');
+            startKycPolling(customerId, pubkey);
+            return;
+          }
+          if (kycStatus === 'rejected') {
+            setStep('kyc_rejected');
+            return;
+          }
+          // not_started → fall through to onboarding (gets a fresh URL)
+        }
+
+        // Onboarding path: server may swap our IDs if the wallet was already
+        // registered under a different customer ("see org: XYZ").
+        if (!customerId) customerId = crypto.randomUUID();
+        if (!bankAccId) bankAccId = crypto.randomUUID();
+
+        const result = await startOnboarding(customerId, bankAccId, pubkey);
+        customerId = result.customerId;
+        bankAccId = result.bankAccountId;
+        localStorage.setItem(CUSTOMER_KEY, customerId);
+        localStorage.setItem(BANK_ACCOUNT_KEY, bankAccId);
+        window.dispatchEvent(new Event('kiro:customerIdReady'));
+        customerIdRef.current = customerId;
+        bankAccountIdRef.current = bankAccId;
+
+        // Re-check KYC with the (possibly swapped) canonical IDs — the existing
+        // customer may already be approved or in review.
+        const kycStatus = await getKycStatus(customerId, pubkey);
+        if (kycStatus === 'approved') {
+          try {
+            const accounts = await getBankAccounts(customerId);
+            if (accounts.length > 0) {
+              bankAccountIdRef.current = accounts[0].id;
+              localStorage.setItem(BANK_ACCOUNT_KEY, accounts[0].id);
+            }
+          } catch { /* keep current ID */ }
+          setStep('amount');
+          return;
+        }
+        if (kycStatus === 'pending') {
+          setStep('kyc_review');
+          startKycPolling(customerId, pubkey);
+          return;
+        }
+        if (kycStatus === 'rejected') {
+          setStep('kyc_rejected');
+          return;
+        }
+
+        setKycUrl(result.kycUrl);
+        setStep('kyc');
+        startKycPolling(customerId, pubkey);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Erro ao verificar identidade';
+        setErrorMsg(msg);
+        setStep('error');
+      }
+    },
+    [stopKycPolling, startKycPolling],
+  );
+
+  // On open: reset transient state and start flow
   useEffect(() => {
     if (!open) {
+      stopKycPolling();
       cancelRef.current = true;
       return;
     }
@@ -91,17 +200,22 @@ export function SacarPixModal({ open, onClose }: SacarPixModalProps) {
       setStep('no_wallet');
       return;
     }
-    startFlow();
+    startFlow(publicKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
+  // If wallet connects while modal is already open
   useEffect(() => {
     if (open && isConnected && publicKey && step === 'no_wallet') {
-      startFlow();
+      startFlow(publicKey);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isConnected, publicKey]);
 
+  useEffect(() => () => stopKycPolling(), [stopKycPolling]);
+
+  // After a successful off-ramp, refresh the balance once Horizon has indexed
+  // the burn transaction (~6s typically).
   useEffect(() => {
     if (step !== 'done') return;
     const timer = setTimeout(() => {
@@ -128,6 +242,13 @@ export function SacarPixModal({ open, onClose }: SacarPixModalProps) {
     }
   }
 
+  /**
+   * Wraps `getQuote` with one retry path for the sandbox bypass: if Etherfuse
+   * rejects the quote because agreements were not accepted (which happens
+   * when KYC was approved programmatically, skipping the hosted UI's
+   * terms-and-conditions screen), call `sandboxApprove` to retroactively
+   * accept them and try the quote again. Only runs in sandbox builds.
+   */
   async function tryQuoteWithSandboxRecovery(num: number) {
     try {
       return await getQuote(customerIdRef.current, num.toFixed(7));
@@ -194,7 +315,78 @@ export function SacarPixModal({ open, onClose }: SacarPixModalProps) {
     throw new Error('Tempo limite esgotado. Tente novamente.');
   }
 
+  /**
+   * Sandbox-only: posts a dummy ID document to Etherfuse's documents-upload
+   * endpoint, which their sandbox auto-approves immediately (per
+   * docs.etherfuse.com/api-reference/kyc/upload-kyc-documents). Skips the
+   * human-review queue that sandbox uses for hosted-UI submissions.
+   * Backend gate ensures this no-ops in production.
+   */
+  async function handleSandboxApprove() {
+    if (!publicKey || !customerIdRef.current) return;
+    setIsSandboxApproving(true);
+    setErrorMsg('');
+    try {
+      // Trust the upload response — getKycStatus has propagation lag and
+      // would still report "proposed" right after this call returns.
+      const status = await sandboxApprove(
+        customerIdRef.current,
+        publicKey,
+        bankAccountIdRef.current,
+      );
+      if (status === 'approved') {
+        stopKycPolling();
+        try {
+          const accounts = await getBankAccounts(customerIdRef.current);
+          if (accounts.length > 0) {
+            bankAccountIdRef.current = accounts[0].id;
+            localStorage.setItem(BANK_ACCOUNT_KEY, accounts[0].id);
+          }
+        } catch { /* keep current ID */ }
+        setStep('amount');
+      } else if (status === 'rejected') {
+        stopKycPolling();
+        setStep('kyc_rejected');
+      }
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Erro no sandbox approve');
+      setStep('error');
+    } finally {
+      setIsSandboxApproving(false);
+    }
+  }
+
+  /**
+   * Re-open the KYC form when stuck on the "em análise" screen. Etherfuse
+   * returns `pending` both for genuinely-under-review customers AND for
+   * customers who started but never finished the form — we can't tell them
+   * apart, so we give the user a way back to the iframe either way.
+   */
+  async function resumeKyc() {
+    if (!publicKey || !customerIdRef.current) return;
+    setErrorMsg('');
+    setStep('loading');
+    try {
+      const result = await startOnboarding(
+        customerIdRef.current,
+        bankAccountIdRef.current,
+        publicKey,
+      );
+      customerIdRef.current = result.customerId;
+      bankAccountIdRef.current = result.bankAccountId;
+      localStorage.setItem(CUSTOMER_KEY, result.customerId);
+      localStorage.setItem(BANK_ACCOUNT_KEY, result.bankAccountId);
+      window.dispatchEvent(new Event('kiro:customerIdReady'));
+      setKycUrl(result.kycUrl);
+      setStep('kyc');
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Erro ao reabrir cadastro');
+      setStep('error');
+    }
+  }
+
   function handleClose() {
+    stopKycPolling();
     cancelRef.current = true;
     onClose();
   }
@@ -216,7 +408,7 @@ export function SacarPixModal({ open, onClose }: SacarPixModalProps) {
     ? amountBRL.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
     : '';
 
-  const SACAR_TUDO_FEE_BUFFER = 0.05;
+ const SACAR_TUDO_FEE_BUFFER = 0.05;
   const sacarTudoCents =
     maxBRL != null && maxBRL > SACAR_TUDO_FEE_BUFFER
       ? Math.floor((maxBRL - SACAR_TUDO_FEE_BUFFER) * 100)
@@ -240,6 +432,7 @@ export function SacarPixModal({ open, onClose }: SacarPixModalProps) {
           overflowX: 'hidden',
         }}
       >
+        {/* Header */}
         <div className="flex justify-between items-center mb-[22px]">
           <h2 className="k-h2">Sacar via PIX</h2>
           <button
@@ -252,6 +445,7 @@ export function SacarPixModal({ open, onClose }: SacarPixModalProps) {
           </button>
         </div>
 
+        {/* LOADING */}
         {step === 'loading' && (
           <div className="flex flex-col items-center gap-4 py-10">
             <Loader2 size={32} strokeWidth={1.5} className="animate-spin" style={{ color: 'var(--kiro-green)' }} />
@@ -259,6 +453,7 @@ export function SacarPixModal({ open, onClose }: SacarPixModalProps) {
           </div>
         )}
 
+        {/* NO WALLET */}
         {step === 'no_wallet' && (
           <div className="flex flex-col gap-5">
             <p className="text-[14px] text-[var(--fg-2)] leading-relaxed">
@@ -270,6 +465,96 @@ export function SacarPixModal({ open, onClose }: SacarPixModalProps) {
           </div>
         )}
 
+        {/* KYC IFRAME */}
+        {step === 'kyc' && (
+          <div className="flex flex-col gap-3">
+            <p className="text-[14px] text-[var(--fg-2)] leading-relaxed">
+              Complete o cadastro abaixo para habilitar saques via PIX.
+            </p>
+
+            <TestnetHint onSkip={handleSandboxApprove} skipping={isSandboxApproving} />
+
+            <button
+              type="button"
+              onClick={() => window.open(kycUrl, '_blank', 'noopener,noreferrer')}
+              className="inline-flex items-center justify-center gap-2 w-full font-display font-medium rounded-[var(--radius-md)] cursor-pointer transition-colors hover:bg-white/[0.10]"
+              style={{
+                padding: '10px 16px',
+                fontSize: 13,
+                background: 'rgba(255,255,255,0.06)',
+                color: 'var(--fg-1)',
+                border: '1px solid var(--stroke-3)',
+              }}
+            >
+              <ExternalLink size={14} strokeWidth={1.7} />
+              Abrir cadastro em nova janela
+            </button>
+
+            <div
+              className="rounded-[var(--radius-md)] overflow-hidden border border-[var(--stroke-3)]"
+              style={{ height: 460 }}
+            >
+              <iframe
+                src={kycUrl}
+                className="w-full h-full"
+                sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+                title="Cadastro KYC"
+              />
+            </div>
+            <div className="flex items-center gap-2 text-[12px] text-[var(--fg-3)]">
+              <Loader2 size={13} strokeWidth={1.5} className="animate-spin" />
+              Aguardando aprovação do cadastro...
+            </div>
+          </div>
+        )}
+
+        {/* KYC IN REVIEW */}
+        {step === 'kyc_review' && (
+          <div className="flex flex-col items-center gap-5 py-8 text-center">
+            <Loader2 size={36} strokeWidth={1.4} className="animate-spin" style={{ color: 'var(--kiro-green)' }} />
+            <div>
+              <p className="text-[15px] font-medium text-[var(--fg-1)] mb-1">Cadastro em análise</p>
+              <p className="text-[13px] text-[var(--fg-3)] leading-relaxed">
+                Aguarde a aprovação ou retome o formulário se você não finalizou.
+              </p>
+            </div>
+            <Button variant="secondary" onClick={resumeKyc}>
+              Reabrir cadastro
+            </Button>
+            {SANDBOX_ENABLED && (
+              <button
+                type="button"
+                onClick={handleSandboxApprove}
+                disabled={isSandboxApproving}
+                className="text-[12px] underline-offset-2 hover:underline disabled:opacity-50 cursor-pointer"
+                style={{
+                  color: 'var(--fg-3)',
+                  background: 'transparent',
+                  border: 'none',
+                  padding: 0,
+                }}
+              >
+                {isSandboxApproving ? 'Aprovando...' : 'Pular aprovação (sandbox)'}
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* KYC REJECTED */}
+        {step === 'kyc_rejected' && (
+          <div className="flex flex-col items-center gap-5 py-8 text-center">
+            <AlertCircle size={40} strokeWidth={1.4} style={{ color: 'rgba(255,77,109,0.85)' }} />
+            <div>
+              <p className="text-[15px] font-medium text-[var(--fg-1)] mb-1">Cadastro recusado</p>
+              <p className="text-[13px] text-[var(--fg-3)] leading-relaxed">
+                Sua verificação foi recusada. Entre em contato com o suporte para mais informações.
+              </p>
+            </div>
+            <Button variant="secondary" onClick={handleClose}>Fechar</Button>
+          </div>
+        )}
+
+        {/* AMOUNT */}
         {step === 'amount' && (
           <div className="flex flex-col gap-5">
             <div className="flex flex-col gap-[6px]">
@@ -339,6 +624,7 @@ export function SacarPixModal({ open, onClose }: SacarPixModalProps) {
           </div>
         )}
 
+        {/* CONFIRM */}
         {step === 'confirm' && quote && (
           <div className="flex flex-col gap-5">
             <div
@@ -405,6 +691,7 @@ export function SacarPixModal({ open, onClose }: SacarPixModalProps) {
           </div>
         )}
 
+        {/* PROCESSING */}
         {step === 'processing' && (
           <div className="flex flex-col items-center gap-4 py-10">
             <Loader2 size={32} strokeWidth={1.5} className="animate-spin" style={{ color: 'var(--kiro-green)' }} />
@@ -412,6 +699,7 @@ export function SacarPixModal({ open, onClose }: SacarPixModalProps) {
           </div>
         )}
 
+        {/* DONE */}
         {step === 'done' && (
           <div className="flex flex-col items-center gap-5 py-8 text-center">
             <CheckCircle size={48} strokeWidth={1.4} style={{ color: 'var(--kiro-green)' }} />
@@ -427,6 +715,7 @@ export function SacarPixModal({ open, onClose }: SacarPixModalProps) {
           </div>
         )}
 
+        {/* ERROR */}
         {step === 'error' && (
           <div className="flex flex-col items-center gap-5 py-8 text-center">
             <AlertCircle size={40} strokeWidth={1.4} style={{ color: 'rgba(255,77,109,0.85)' }} />
@@ -437,7 +726,7 @@ export function SacarPixModal({ open, onClose }: SacarPixModalProps) {
             <div className="flex gap-3 w-full">
               <Button
                 variant="secondary"
-                onClick={() => startFlow()}
+                onClick={() => publicKey && startFlow(publicKey)}
                 className="flex-1 justify-center"
               >
                 Tentar novamente
