@@ -59,6 +59,36 @@ export async function listTransactions(token: string): Promise<Transaction[]> {
   return (data as Transaction[]) ?? [];
 }
 
+/**
+ * Triggers a browser download of the user's full transaction history as CSV.
+ * Streams from the backend; nothing is held in memory client-side.
+ */
+export async function downloadTransactionsCSV(token: string): Promise<void> {
+  const res = await fetch(`${BACKEND_URL}/api/me/transactions/export`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    let msg = `HTTP ${res.status}`;
+    try { msg = (JSON.parse(text) as { error?: string }).error ?? msg; } catch { /* keep */ }
+    throw new Error(msg);
+  }
+
+  const blob = await res.blob();
+  const disposition = res.headers.get('Content-Disposition') ?? '';
+  const match = /filename="?([^";]+)"?/i.exec(disposition);
+  const filename = match?.[1] ?? `kiro-transacoes-${new Date().toISOString().slice(0, 10)}.csv`;
+
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 export async function getTotalFees(token: string): Promise<number> {
   const { status, data } = await request<{ total_fee_brl_amount: number }>(
     '/api/me/transactions/fees/total',

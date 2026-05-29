@@ -1,11 +1,13 @@
 import { useMemo, useState } from 'react';
 import { Download, Filter, Plus, Search, ShoppingBag, ArrowUpRight } from 'lucide-react';
+import { usePrivy } from '@privy-io/react-auth';
 import { Button } from '@/components/Button';
 import { Card } from '@/components/Card';
 import { FilterChip } from '@/components/FilterChip';
 import { StatusTag } from '@/components/StatusTag';
 import { useWallet } from '@/context/WalletContext';
 import { useTransactions } from '@/context/TransactionsContext';
+import { downloadTransactionsCSV } from '@/lib/api/transactions';
 import type { WalletPayment } from '@/lib/stellar';
 
 type FilterKey = 'todos' | 'recebidos' | 'saques';
@@ -18,10 +20,26 @@ interface TransacoesProps {
 /** Full filterable list of every TESOURO movement recorded by the backend. */
 export default function Transacoes({ onReceive }: TransacoesProps) {
   const { isConnected } = useWallet();
+  const { getAccessToken } = usePrivy();
   const { payments: allPayments } = useTransactions();
   const payments: WalletPayment[] | null = isConnected ? allPayments : null;
   const [filter, setFilter] = useState<FilterKey>('todos');
   const [q, setQ] = useState('');
+  const [exporting, setExporting] = useState(false);
+
+  async function handleExport() {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      const token = await getAccessToken();
+      if (!token) throw new Error('Sessão expirada. Faça login novamente.');
+      await downloadTransactionsCSV(token);
+    } catch (err) {
+      console.warn('[Transacoes] export failed:', err);
+    } finally {
+      setExporting(false);
+    }
+  }
 
   const filtered = useMemo(() => {
     if (!payments) return [];
@@ -49,12 +67,18 @@ export default function Transacoes({ onReceive }: TransacoesProps) {
           </div>
         </div>
         <div className="flex gap-[10px]">
-          {/* Desktop-only utility buttons — chips below already cover filtering and CSV is not useful on a phone. */}
+          {/* Filtros stays desktop-only because chips below already cover filtering on mobile. */}
           <Button variant="secondary" size="sm" icon={Filter} className="hidden md:inline-flex">
             Filtros
           </Button>
-          <Button variant="secondary" size="sm" icon={Download} className="hidden md:inline-flex">
-            Exportar CSV
+          <Button
+            variant="secondary"
+            size="sm"
+            icon={Download}
+            onClick={handleExport}
+            disabled={!isConnected || exporting}
+          >
+            {exporting ? 'Exportando...' : 'Exportar CSV'}
           </Button>
           {/* Mobile-only: desktop users already have the trigger on /recebimentos. */}
           {onReceive && (
