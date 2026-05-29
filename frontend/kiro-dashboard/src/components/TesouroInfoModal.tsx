@@ -1,19 +1,18 @@
 import { createPortal } from 'react-dom';
-import { X, Zap } from 'lucide-react';
-import { YIELD_APY_LABEL } from '@/lib/mocks';
+import { X, Landmark } from 'lucide-react';
 
-interface YieldInfoModalProps {
+interface TesouroInfoModalProps {
   open: boolean;
   onClose: () => void;
 }
 
-export function YieldInfoModal({ open, onClose }: YieldInfoModalProps) {
+export function TesouroInfoModal({ open, onClose }: TesouroInfoModalProps) {
   if (!open) return null;
   return createPortal(
     <div
       role="dialog"
       aria-modal="true"
-      aria-label="Como funciona o rendimento"
+      aria-label="O que é TESOURO"
       className="fixed inset-0 z-[130] flex items-end md:items-center justify-center"
       onClick={onClose}
     >
@@ -37,28 +36,32 @@ export function YieldInfoModal({ open, onClose }: YieldInfoModalProps) {
           className="flex items-center justify-center rounded-[14px] mb-5"
           style={{ width: 48, height: 48, background: 'rgba(0,255,135,0.12)', color: 'var(--kiro-green)' }}
         >
-          <Zap size={22} strokeWidth={1.6} />
+          <Landmark size={22} strokeWidth={1.6} />
         </div>
 
         <h2 className="font-display font-semibold text-[18px] text-[var(--fg-1)] mb-2">
-          Como funciona o rendimento?
+          O que é TESOURO?
         </h2>
         <p className="font-sans text-[14px] text-[var(--fg-2)] leading-relaxed mb-4">
-          Seu saldo na Kiro rende automaticamente todos os dias, sem que você precise fazer nada.
+          TESOURO é um título público federal brasileiro em formato digital. Ao receber via PIX
+          na Kiro, seu dinheiro é convertido para TESOURO automaticamente.
         </p>
+
         <div
           className="rounded-[14px] border mb-4"
           style={{ padding: '16px', background: 'rgba(0,255,135,0.05)', borderColor: 'rgba(0,255,135,0.18)' }}
         >
           <div className="font-display font-semibold text-[var(--kiro-green)] text-[15px] mb-1">
-            {YIELD_APY_LABEL} ao ano
+            Por que TESOURO?
           </div>
           <div className="font-sans text-[13px] text-[var(--fg-2)]">
-            Equivalente a 100% do CDI — a taxa de referência do mercado financeiro brasileiro.
+            Diferente do saldo em conta comum, o TESOURO rende automaticamente todos os dias —
+            sem prazo de carência e sem você precisar fazer nada.
           </div>
         </div>
+
         <p className="font-sans text-[13px] text-[var(--fg-3)] leading-relaxed">
-          O rendimento é calculado diariamente e acumulado automaticamente. Você pode sacar a qualquer momento via PIX.
+          Quando quiser, basta sacar via PIX — o TESOURO é convertido de volta para reais na hora.
         </p>
 
         <button
