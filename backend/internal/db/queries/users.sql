@@ -24,3 +24,13 @@ RETURNING id, privy_user_id, store_name_enc, cnpj_enc, cnpj_hash, email_enc, pix
 UPDATE users
 SET status = 'inactive', updated_at = NOW()
 WHERE privy_user_id = $1 AND status = 'active';
+
+-- name: GetNotificationsLastSeen :one
+SELECT notifications_last_seen_at
+FROM users
+WHERE id = $1;
+
+-- name: UpdateNotificationsLastSeen :exec
+UPDATE users
+SET notifications_last_seen_at = $2, updated_at = NOW()
+WHERE id = $1;

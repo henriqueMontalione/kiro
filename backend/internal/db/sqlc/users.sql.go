@@ -2,8 +2,10 @@ package sqlc
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const getUserByPrivyID = `-- name: GetUserByPrivyID :one
@@ -122,5 +124,28 @@ WHERE privy_user_id = $1 AND status = 'active'
 
 func (q *Queries) SoftDeleteUser(ctx context.Context, privyUserID string) error {
 	_, err := q.db.Exec(ctx, softDeleteUser, privyUserID)
+	return err
+}
+
+const getNotificationsLastSeen = `-- name: GetNotificationsLastSeen :one
+SELECT notifications_last_seen_at
+FROM users
+WHERE id = $1
+`
+
+func (q *Queries) GetNotificationsLastSeen(ctx context.Context, id uuid.UUID) (pgtype.Timestamptz, error) {
+	var ts pgtype.Timestamptz
+	err := q.db.QueryRow(ctx, getNotificationsLastSeen, id).Scan(&ts)
+	return ts, err
+}
+
+const updateNotificationsLastSeen = `-- name: UpdateNotificationsLastSeen :exec
+UPDATE users
+SET notifications_last_seen_at = $2, updated_at = NOW()
+WHERE id = $1
+`
+
+func (q *Queries) UpdateNotificationsLastSeen(ctx context.Context, id uuid.UUID, ts time.Time) error {
+	_, err := q.db.Exec(ctx, updateNotificationsLastSeen, id, ts)
 	return err
 }

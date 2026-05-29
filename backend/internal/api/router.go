@@ -69,6 +69,8 @@ func NewRouter(cfg *config.Config, pool *pgxpool.Pool, verifier *auth.Verifier, 
 		r.Get("/kyc-profile", s.getKycProfile)
 		r.Post("/kyc-profile", s.createKycProfile)
 		r.Post("/kyc-profile/docs", s.markKycDocsUploaded)
+		r.Get("/notifications/last-seen", s.getNotificationsLastSeen)
+		r.Post("/notifications/last-seen", s.markNotificationsRead)
 	})
 
 	return r
