@@ -465,6 +465,83 @@ function etherfuseApi(env: ApiEnv): Plugin {
             });
           }
 
+          // POST /api/ef-kyc-submit — submits KYC identity data to Etherfuse then
+          // accepts all three required agreements. Used by the programmatic KYC
+          // wizard; replaces the hosted-UI iframe for identity collection.
+          if (parsed.pathname === '/api/ef-kyc-submit' && method === 'POST') {
+            const {
+              customerId, bankAccountId, publicKey,
+              givenName, familyName, cpf, birthDate,
+              addressStreet, addressCity, addressState, addressPostalCode,
+            } = JSON.parse(await readBody(req)) as {
+              customerId: string; bankAccountId: string; publicKey: string;
+              givenName: string; familyName: string; cpf: string; birthDate: string;
+              addressStreet: string; addressCity: string; addressState: string; addressPostalCode: string;
+            };
+
+            let kycStatus: string | null = null;
+            try {
+              const kycData = await efetch(env, 'POST', `/ramp/customer/${customerId}/kyc`, {
+                pubkey: publicKey,
+                identity: {
+                  id: customerId,
+                  name: { givenName, familyName },
+                  dateOfBirth: birthDate,
+                  address: { street: addressStreet, city: addressCity, region: addressState, postalCode: addressPostalCode, country: 'BR' },
+                  idNumbers: [{ value: cpf, type: 'CPF' }],
+                },
+              }) as { status?: string };
+              kycStatus = kycData.status ?? null;
+            } catch (err) {
+              console.log('[ef-kyc-submit] /kyc failed (may already be submitted):', (err as Error).message);
+              try {
+                const s = await efetch(env, 'GET', `/ramp/customer/${customerId}/kyc/${publicKey}`) as { status?: string };
+                kycStatus = s.status ?? null;
+              } catch { /* keep null */ }
+            }
+
+            const freshUrl = async (): Promise<string | null> => {
+              try {
+                const d = await efetch(env, 'POST', '/ramp/onboarding-url', {
+                  customerId, bankAccountId, publicKey, blockchain: 'stellar',
+                }) as { presigned_url?: string };
+                return d.presigned_url ?? null;
+              } catch { return null; }
+            };
+
+            for (const path of [
+              '/ramp/agreements/electronic-signature',
+              '/ramp/agreements/terms-and-conditions',
+              '/ramp/agreements/customer-agreement',
+            ]) {
+              const url = await freshUrl();
+              if (!url) continue;
+              try {
+                await efetch(env, 'POST', path, { presignedUrl: url });
+              } catch (err) {
+                console.log(`[ef-kyc-submit] ${path} failed:`, (err as Error).message);
+              }
+            }
+
+            return sendJson(res, { ok: true, kycStatus });
+          }
+
+          // POST /api/ef-kyc-documents — uploads KYC document images to Etherfuse.
+          // documentType: 'document' (id_front + id_back) or 'selfie'.
+          if (parsed.pathname === '/api/ef-kyc-documents' && method === 'POST') {
+            const { customerId, publicKey, documentType, images } = JSON.parse(await readBody(req)) as {
+              customerId: string; publicKey: string;
+              documentType: 'document' | 'selfie';
+              images: Array<{ label: string; image: string }>;
+            };
+            await efetch(env, 'POST', `/ramp/customer/${customerId}/kyc/documents`, {
+              pubkey: publicKey,
+              documentType,
+              images,
+            });
+            return sendJson(res, { ok: true });
+          }
+
           return sendJson(res, { error: 'Not found' }, 404);
         } catch (err) {
           const e = err as Error & { status?: number };

@@ -273,6 +273,45 @@ export async function simulateOnRampPayment(orderId: string): Promise<void> {
   await apiFetch<{ ok: boolean }>('POST', '/ef-onramp-simulate-payment', { orderId });
 }
 
+export interface SubmitKycBody {
+  customerId: string;
+  bankAccountId: string;
+  publicKey: string;
+  givenName: string;
+  familyName: string;
+  cpf: string;
+  birthDate: string;
+  addressStreet: string;
+  addressCity: string;
+  addressState: string;
+  addressPostalCode: string;
+}
+
+/** Submits KYC identity data to Etherfuse and accepts all required agreements. */
+export async function submitKyc(body: SubmitKycBody): Promise<{ kycStatus: string | null }> {
+  return apiFetch<{ kycStatus: string | null }>('POST', '/ef-kyc-submit', body);
+}
+
+export interface KycDocImage {
+  label: string;
+  image: string;
+}
+
+/** Uploads KYC document images (id_front/id_back or selfie) to Etherfuse. */
+export async function uploadKycDocuments(
+  customerId: string,
+  publicKey: string,
+  documentType: 'document' | 'selfie',
+  images: KycDocImage[],
+): Promise<void> {
+  await apiFetch<{ ok: boolean }>('POST', '/ef-kyc-documents', {
+    customerId,
+    publicKey,
+    documentType,
+    images,
+  });
+}
+
 /**
  * Asks Etherfuse to rebuild and return a fresh Stellar claim XDR for a
  * completed on-ramp order. Use as a fallback when the order GET response
