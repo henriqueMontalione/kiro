@@ -14,6 +14,7 @@ type Transaction struct {
 	Direction        string      `json:"direction"`
 	TesouroAmount    int64       `json:"tesouro_amount"`
 	BrlAmount        int64       `json:"brl_amount"`
+	FeeBrlAmount     int64       `json:"fee_brl_amount"`
 	StellarTxHash    pgtype.Text `json:"stellar_tx_hash"`
 	EtherfuseOrderID pgtype.Text `json:"etherfuse_order_id"`
 	Status           string      `json:"status"`
@@ -22,11 +23,11 @@ type Transaction struct {
 
 const insertTransaction = `-- name: InsertTransaction :one
 INSERT INTO transactions (
-    id, user_id, direction, tesouro_amount, brl_amount, stellar_tx_hash, etherfuse_order_id, status
+    id, user_id, direction, tesouro_amount, brl_amount, fee_brl_amount, stellar_tx_hash, etherfuse_order_id, status
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8
+    $1, $2, $3, $4, $5, $6, $7, $8, $9
 )
-RETURNING id, user_id, direction, tesouro_amount, brl_amount, stellar_tx_hash, etherfuse_order_id, status, created_at
+RETURNING id, user_id, direction, tesouro_amount, brl_amount, fee_brl_amount, stellar_tx_hash, etherfuse_order_id, status, created_at
 `
 
 type InsertTransactionParams struct {
@@ -35,6 +36,7 @@ type InsertTransactionParams struct {
 	Direction        string      `json:"direction"`
 	TesouroAmount    int64       `json:"tesouro_amount"`
 	BrlAmount        int64       `json:"brl_amount"`
+	FeeBrlAmount     int64       `json:"fee_brl_amount"`
 	StellarTxHash    pgtype.Text `json:"stellar_tx_hash"`
 	EtherfuseOrderID pgtype.Text `json:"etherfuse_order_id"`
 	Status           string      `json:"status"`
@@ -42,19 +44,19 @@ type InsertTransactionParams struct {
 
 func (q *Queries) InsertTransaction(ctx context.Context, arg InsertTransactionParams) (Transaction, error) {
 	row := q.db.QueryRow(ctx, insertTransaction,
-		arg.ID, arg.UserID, arg.Direction, arg.TesouroAmount, arg.BrlAmount,
+		arg.ID, arg.UserID, arg.Direction, arg.TesouroAmount, arg.BrlAmount, arg.FeeBrlAmount,
 		arg.StellarTxHash, arg.EtherfuseOrderID, arg.Status,
 	)
 	var t Transaction
 	err := row.Scan(
-		&t.ID, &t.UserID, &t.Direction, &t.TesouroAmount, &t.BrlAmount,
+		&t.ID, &t.UserID, &t.Direction, &t.TesouroAmount, &t.BrlAmount, &t.FeeBrlAmount,
 		&t.StellarTxHash, &t.EtherfuseOrderID, &t.Status, &t.CreatedAt,
 	)
 	return t, err
 }
 
 const listTransactionsByUserID = `-- name: ListTransactionsByUserID :many
-SELECT id, user_id, direction, tesouro_amount, brl_amount, stellar_tx_hash, etherfuse_order_id, status, created_at
+SELECT id, user_id, direction, tesouro_amount, brl_amount, fee_brl_amount, stellar_tx_hash, etherfuse_order_id, status, created_at
 FROM transactions
 WHERE user_id = $1
 ORDER BY created_at DESC
@@ -77,7 +79,7 @@ func (q *Queries) ListTransactionsByUserID(ctx context.Context, arg ListTransact
 	for rows.Next() {
 		var t Transaction
 		if err := rows.Scan(
-			&t.ID, &t.UserID, &t.Direction, &t.TesouroAmount, &t.BrlAmount,
+			&t.ID, &t.UserID, &t.Direction, &t.TesouroAmount, &t.BrlAmount, &t.FeeBrlAmount,
 			&t.StellarTxHash, &t.EtherfuseOrderID, &t.Status, &t.CreatedAt,
 		); err != nil {
 			return nil, err

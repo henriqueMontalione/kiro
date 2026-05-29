@@ -1,0 +1,1 @@
+ALTER TABLE transactions ADD COLUMN fee_brl_amount BIGINT NOT NULL DEFAULT 0;

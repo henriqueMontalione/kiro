@@ -20,6 +20,7 @@ type transactionResponse struct {
 	Direction        string    `json:"direction"`
 	TesouroAmount    int64     `json:"tesouro_amount"`
 	BrlAmount        int64     `json:"brl_amount"`
+	FeeBrlAmount     int64     `json:"fee_brl_amount"`
 	StellarTxHash    *string   `json:"stellar_tx_hash,omitempty"`
 	EtherfuseOrderID *string   `json:"etherfuse_order_id,omitempty"`
 	Status           string    `json:"status"`
@@ -32,6 +33,7 @@ func toTransactionResponse(t sqlc.Transaction) transactionResponse {
 		Direction:     t.Direction,
 		TesouroAmount: t.TesouroAmount,
 		BrlAmount:     t.BrlAmount,
+		FeeBrlAmount:  t.FeeBrlAmount,
 		Status:        t.Status,
 		CreatedAt:     t.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 	}
@@ -50,6 +52,7 @@ type createTransactionBody struct {
 	Direction        string  `json:"direction"`
 	TesouroAmount    int64   `json:"tesouro_amount"`
 	BrlAmount        int64   `json:"brl_amount"`
+	FeeBrlAmount     int64   `json:"fee_brl_amount,omitempty"`
 	StellarTxHash    *string `json:"stellar_tx_hash,omitempty"`
 	EtherfuseOrderID *string `json:"etherfuse_order_id,omitempty"`
 	Status           string  `json:"status,omitempty"`
@@ -98,6 +101,7 @@ func (s *Server) createTransaction(w http.ResponseWriter, r *http.Request) {
 		Direction:        body.Direction,
 		TesouroAmount:    body.TesouroAmount,
 		BrlAmount:        body.BrlAmount,
+		FeeBrlAmount:     body.FeeBrlAmount,
 		StellarTxHash:    pgTextOrNullPtr(body.StellarTxHash),
 		EtherfuseOrderID: pgTextOrNullPtr(body.EtherfuseOrderID),
 		Status:           status,
