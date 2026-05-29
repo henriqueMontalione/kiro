@@ -59,6 +59,18 @@ export async function listTransactions(token: string): Promise<Transaction[]> {
   return (data as Transaction[]) ?? [];
 }
 
+export async function getTotalFees(token: string): Promise<number> {
+  const { status, data } = await request<{ total_fee_brl_amount: number }>(
+    '/api/me/transactions/fees/total',
+    token,
+  );
+  if (status >= 400) {
+    const msg = (data as { error?: string } | null)?.error ?? `HTTP ${status}`;
+    throw new Error(msg);
+  }
+  return (data as { total_fee_brl_amount: number } | null)?.total_fee_brl_amount ?? 0;
+}
+
 export async function createTransaction(token: string, body: CreateTransactionBody): Promise<Transaction> {
   const { status, data } = await request<Transaction>('/api/me/transactions', token, {
     method: 'POST',

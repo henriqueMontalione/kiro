@@ -1,4 +1,5 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { Info } from 'lucide-react';
 import {
   BarChart,
   Bar,
@@ -8,9 +9,12 @@ import {
   ResponsiveContainer,
   Tooltip,
 } from 'recharts';
+import { usePrivy } from '@privy-io/react-auth';
 import { Card } from '@/components/Card';
+import { FeeInfoModal } from '@/components/FeeInfoModal';
 import { useWallet } from '@/context/WalletContext';
 import { useTransactions } from '@/context/TransactionsContext';
+import { getTotalFees } from '@/lib/api/transactions';
 
 interface DayEntry {
   label: string;
@@ -65,6 +69,9 @@ function ChartTooltipContent({ active, payload, label }: {
 export default function MobileMais() {
   const { isConnected } = useWallet();
   const { payments } = useTransactions();
+  const { getAccessToken } = usePrivy();
+  const [feeInfoOpen, setFeeInfoOpen] = useState(false);
+  const [totalFeesCentavos, setTotalFeesCentavos] = useState<number | null>(null);
 
   const chartData = useMemo(
     () => buildChartData(isConnected ? payments : []),
@@ -75,6 +82,24 @@ export default function MobileMais() {
   const todayPayments = isConnected ? payments.filter((p) => p.createdAt.slice(0, 10) === todayStr) : [];
   const todayIn = todayPayments.filter((p) => p.direction === 'in').reduce((s, p) => s + p.brlCentavos / 100, 0);
   const todayOut = todayPayments.filter((p) => p.direction === 'out').reduce((s, p) => s + p.brlCentavos / 100, 0);
+
+  // Re-fetch whenever transactions list updates so the running total stays in
+  // sync without summing on the client (server already aggregates with SUM).
+  useEffect(() => {
+    if (!isConnected) { setTotalFeesCentavos(null); return; }
+    let cancelled = false;
+    (async () => {
+      try {
+        const token = await getAccessToken();
+        if (!token || cancelled) return;
+        const total = await getTotalFees(token);
+        if (!cancelled) setTotalFeesCentavos(total);
+      } catch (err) {
+        console.warn('[MobileMais] getTotalFees failed:', err);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [isConnected, getAccessToken, payments.length]);
 
   return (
     <div className="flex flex-col gap-4">
@@ -97,6 +122,25 @@ export default function MobileMais() {
           </div>
         </Card>
       </div>
+
+      <Card>
+        <div className="flex items-center justify-between gap-2 mb-1">
+          <div className="text-[11px] text-[var(--fg-3)] font-sans uppercase tracking-wider">Taxas pagas</div>
+          <button
+            type="button"
+            onClick={() => setFeeInfoOpen(true)}
+            className="flex items-center justify-center cursor-pointer"
+            style={{ background: 'none', border: 'none', padding: 0, color: 'var(--fg-3)' }}
+            aria-label="Sobre as taxas"
+          >
+            <Info size={14} strokeWidth={1.8} />
+          </button>
+        </div>
+        <div className="k-money text-[18px] font-semibold text-[var(--fg-1)]">
+          {isConnected && totalFeesCentavos != null ? fmtBRL(totalFeesCentavos / 100) : '—'}
+        </div>
+        <div className="text-[11px] text-[var(--fg-3)] mt-1">Total acumulado desde o início</div>
+      </Card>
 
       <Card>
         <div className="font-display text-[14px] font-semibold text-[var(--fg-1)] mb-4">
@@ -145,6 +189,8 @@ export default function MobileMais() {
           </>
         )}
       </Card>
+
+      <FeeInfoModal open={feeInfoOpen} onClose={() => setFeeInfoOpen(false)} />
     </div>
   );
 }
