@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { X, ChevronLeft, ChevronRight, Loader2, CheckCircle, AlertCircle, ExternalLink } from 'lucide-react';
+import { X, ChevronLeft, ChevronRight, Loader2, CheckCircle, AlertCircle, ExternalLink, Info } from 'lucide-react';
 import { Button } from './Button';
 import { TestnetHint } from './TestnetHint';
+import { TesouroInfoModal } from './TesouroInfoModal';
 import { useWallet } from '@/context/WalletContext';
 import { useQuote } from '@/context/QuoteContext';
 import { formatBRL, submitXdr } from '@/lib/stellar';
@@ -54,6 +55,7 @@ export function SacarPixModal({ open, onClose }: SacarPixModalProps) {
   const [processingMsg, setProcessingMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const [isSandboxApproving, setIsSandboxApproving] = useState(false);
+  const [tesouroInfoOpen, setTesouroInfoOpen] = useState(false);
 
   const kycPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const cancelRef = useRef(false);
@@ -233,7 +235,12 @@ export function SacarPixModal({ open, onClose }: SacarPixModalProps) {
 
     setStep('loading');
     try {
-      const q = await tryQuoteWithSandboxRecovery(tesouro);
+      let q = await tryQuoteWithSandboxRecovery(tesouro);
+      const received = parseFloat(q.destinationAmount);
+      if (received > 0 && Math.abs(received - brl) > 0.01) {
+        const corrected = tesouro * (brl / received);
+        q = await tryQuoteWithSandboxRecovery(corrected);
+      }
       setQuote(q);
       setStep('confirm');
     } catch (err) {
@@ -415,6 +422,7 @@ export function SacarPixModal({ open, onClose }: SacarPixModalProps) {
       : null;
 
   return (
+    <>
     <div
       onClick={handleClose}
       className="fixed inset-0 z-[100] flex items-center justify-center p-3 md:p-6"
@@ -639,12 +647,21 @@ export function SacarPixModal({ open, onClose }: SacarPixModalProps) {
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-[13px] text-[var(--fg-3)]">Equivalente em TESOURO</span>
-                <span className="text-[13px] text-[var(--fg-2)]">
+                <span className="flex items-center gap-1.5 text-[13px] text-[var(--fg-2)]">
                   {parseFloat(quote.sourceAmount).toLocaleString('pt-BR', {
                     minimumFractionDigits: 2,
-                    maximumFractionDigits: 4,
+                    maximumFractionDigits: 2,
                   })}{' '}
                   TESOURO
+                  <button
+                    type="button"
+                    onClick={() => setTesouroInfoOpen(true)}
+                    className="flex items-center justify-center cursor-pointer"
+                    style={{ background: 'none', border: 'none', padding: 0, color: 'var(--fg-3)' }}
+                    aria-label="O que é TESOURO?"
+                  >
+                    <Info size={14} strokeWidth={1.8} />
+                  </button>
                 </span>
               </div>
               <div className="h-px" style={{ background: 'var(--stroke-3)' }} />
@@ -739,5 +756,7 @@ export function SacarPixModal({ open, onClose }: SacarPixModalProps) {
         )}
       </div>
     </div>
+    <TesouroInfoModal open={tesouroInfoOpen} onClose={() => setTesouroInfoOpen(false)} />
+    </>
   );
 }
