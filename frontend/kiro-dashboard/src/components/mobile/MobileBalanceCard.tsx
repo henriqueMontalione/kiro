@@ -1,6 +1,8 @@
+import { useState } from 'react';
 import { Eye, EyeOff, Loader2, RefreshCw, Sparkles, Wallet } from 'lucide-react';
 import { Card } from '../Card';
 import { Button } from '../Button';
+import { YieldInfoModal } from '../YieldInfoModal';
 import { YIELD_APY_LABEL } from '@/lib/mocks';
 import { useWallet } from '@/context/WalletContext';
 import { useDashboard } from '@/context/DashboardContext';
@@ -11,6 +13,7 @@ interface MobileBalanceCardProps {
 }
 
 export function MobileBalanceCard({ onReceive }: MobileBalanceCardProps) {
+  const [yieldOpen, setYieldOpen] = useState(false);
   const { isConnected, balance } = useWallet();
   const { valuesHidden, toggleValuesHidden, refresh, isRefreshing } = useDashboard();
   const { formatTesouroAsBRL } = useQuote();
@@ -88,8 +91,10 @@ export function MobileBalanceCard({ onReceive }: MobileBalanceCardProps) {
         </div>
       )}
 
-      <div
-        className="inline-flex items-center gap-[6px] mt-3 rounded-full font-sans text-[12px] text-[var(--kiro-green)]"
+      <button
+        type="button"
+        onClick={() => setYieldOpen(true)}
+        className="inline-flex items-center gap-[6px] mt-3 rounded-full font-sans text-[12px] text-[var(--kiro-green)] bg-transparent border-none cursor-pointer transition-opacity hover:opacity-80"
         style={{
           padding: '5px 10px',
           background: 'rgba(0,255,135,0.10)',
@@ -98,7 +103,8 @@ export function MobileBalanceCard({ onReceive }: MobileBalanceCardProps) {
       >
         <Sparkles size={13} strokeWidth={1.8} />
         Rendendo {YIELD_APY_LABEL}
-      </div>
+      </button>
+      <YieldInfoModal open={yieldOpen} onClose={() => setYieldOpen(false)} />
 
       <div className="mt-5">
         <Button variant="secondary" size="lg" onClick={onReceive} className="w-full justify-center">

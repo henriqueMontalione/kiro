@@ -1,7 +1,9 @@
-import { Diamond, ChevronRight, Eye, EyeOff, RefreshCw, Loader2 } from 'lucide-react';
+import { useState } from 'react';
+import { Diamond, ChevronRight, Eye, EyeOff, RefreshCw, Loader2, Sparkles } from 'lucide-react';
 import { Card, CardEyebrow } from '../Card';
 import { Button } from '../Button';
-import { BALANCE } from '@/lib/mocks';
+import { YieldInfoModal } from '../YieldInfoModal';
+import { BALANCE, YIELD_APY_LABEL } from '@/lib/mocks';
 import { useWallet } from '@/context/WalletContext';
 import { useDashboard } from '@/context/DashboardContext';
 import { useQuote } from '@/context/QuoteContext';
@@ -11,6 +13,7 @@ interface BalanceCardProps {
 }
 
 export function BalanceCard({ onReceive }: BalanceCardProps) {
+  const [yieldOpen, setYieldOpen] = useState(false);
   const { isConnected, balance } = useWallet();
   const { valuesHidden, toggleValuesHidden, refresh, isRefreshing } = useDashboard();
   const { formatTesouroAsBRL, brlPerTesouro } = useQuote();
@@ -96,13 +99,29 @@ export function BalanceCard({ onReceive }: BalanceCardProps) {
         </div>
       )}
 
-      <div className="mt-[14px] flex items-center gap-2 font-sans text-[12px] text-[var(--fg-3)]">
-        <span
-          className="rounded-full bg-[var(--kiro-green)]"
-          style={{ width: 8, height: 8, boxShadow: '0 0 8px rgba(0,255,135,0.7)' }}
-        />
-        {BALANCE.updatedLabel}
+      <div className="mt-[14px] flex items-center gap-3 flex-wrap">
+        <div className="flex items-center gap-2 font-sans text-[12px] text-[var(--fg-3)]">
+          <span
+            className="rounded-full bg-[var(--kiro-green)]"
+            style={{ width: 8, height: 8, boxShadow: '0 0 8px rgba(0,255,135,0.7)' }}
+          />
+          {BALANCE.updatedLabel}
+        </div>
+        <button
+          type="button"
+          onClick={() => setYieldOpen(true)}
+          className="inline-flex items-center gap-[5px] rounded-full font-sans text-[11px] text-[var(--kiro-green)] bg-transparent border-none cursor-pointer transition-opacity hover:opacity-80"
+          style={{
+            padding: '4px 9px',
+            background: 'rgba(0,255,135,0.10)',
+            border: '1px solid rgba(0,255,135,0.22)',
+          }}
+        >
+          <Sparkles size={11} strokeWidth={1.8} />
+          Rendendo {YIELD_APY_LABEL}
+        </button>
       </div>
+      <YieldInfoModal open={yieldOpen} onClose={() => setYieldOpen(false)} />
 
       <div className="mt-7">
         <Button
