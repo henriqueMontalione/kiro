@@ -24,9 +24,7 @@ function buildChartData(payments: { direction: string; brlCentavos: number; crea
     const d = new Date(now);
     d.setDate(now.getDate() - (6 - i));
     const dayStr = d.toISOString().slice(0, 10);
-    const label = d
-      .toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })
-      .replace('.', '');
+    const label = d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
     const dayPayments = payments.filter((p) => p.createdAt.slice(0, 10) === dayStr);
     const received = dayPayments
       .filter((p) => p.direction === 'in')
