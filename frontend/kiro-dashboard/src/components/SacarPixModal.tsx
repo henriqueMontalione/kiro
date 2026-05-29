@@ -415,10 +415,13 @@ export function SacarPixModal({ open, onClose }: SacarPixModalProps) {
     ? amountBRL.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
     : '';
 
- const SACAR_TUDO_FEE_BUFFER = 0.05;
+  // Etherfuse off-ramp fee is 0.20% of the source amount, so the most the user
+  // can receive is balance × (1 − 0.002). Floor to centavos to stay strictly
+  // under the limit after rounding.
+  const SACAR_TUDO_FEE_RATE = 0.002;
   const sacarTudoCents =
-    maxBRL != null && maxBRL > SACAR_TUDO_FEE_BUFFER
-      ? Math.floor((maxBRL - SACAR_TUDO_FEE_BUFFER) * 100)
+    maxBRL != null && maxBRL > 0
+      ? Math.floor(maxBRL * (1 - SACAR_TUDO_FEE_RATE) * 100)
       : null;
 
   return (

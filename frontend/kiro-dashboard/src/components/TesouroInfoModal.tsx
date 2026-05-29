@@ -55,13 +55,13 @@ export function TesouroInfoModal({ open, onClose }: TesouroInfoModalProps) {
             Por que TESOURO?
           </div>
           <div className="font-sans text-[13px] text-[var(--fg-2)]">
-            Diferente do saldo em conta comum, o TESOURO rende automaticamente todos os dias —
-            sem prazo de carência e sem você precisar fazer nada.
+            Diferente do saldo em conta comum, o TESOURO rende automaticamente todos os dias.
+            Sem prazo de carência e sem você precisar fazer nada.
           </div>
         </div>
 
         <p className="font-sans text-[13px] text-[var(--fg-3)] leading-relaxed">
-          Quando quiser, basta sacar via PIX — o TESOURO é convertido de volta para reais na hora.
+          Quando quiser, basta sacar via PIX. O TESOURO é convertido de volta para reais na hora.
         </p>
 
         <button
