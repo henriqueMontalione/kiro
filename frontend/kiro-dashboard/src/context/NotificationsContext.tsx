@@ -7,11 +7,11 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+import { usePrivy } from '@privy-io/react-auth';
 import { useTransactions } from './TransactionsContext';
 import { useWallet } from './WalletContext';
+import { getNotificationsLastSeen, markNotificationsRead } from '@/lib/api/notifications';
 import type { WalletPayment } from '@/lib/stellar';
-
-const SEEN_KEY = 'kiro_notifications_last_seen';
 
 export interface Notification {
   id: string;
@@ -37,15 +37,24 @@ function buildTitle(p: WalletPayment): string {
 export function NotificationsProvider({ children }: { children: ReactNode }) {
   const { payments } = useTransactions();
   const { isConnected } = useWallet();
-  const [lastSeen, setLastSeen] = useState<string>(
-    () => localStorage.getItem(SEEN_KEY) ?? '',
-  );
+  const { getAccessToken } = usePrivy();
+  const [lastSeen, setLastSeen] = useState<string | null>(null);
 
   useEffect(() => {
-    if (isConnected) return;
-    setLastSeen('');
-    localStorage.removeItem(SEEN_KEY);
-  }, [isConnected]);
+    if (!isConnected) { setLastSeen(null); return; }
+    let cancelled = false;
+    (async () => {
+      try {
+        const token = await getAccessToken();
+        if (!token || cancelled) return;
+        const ts = await getNotificationsLastSeen(token);
+        if (!cancelled) setLastSeen(ts);
+      } catch (err) {
+        console.warn('[Notifications] fetch last_seen failed:', err);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [isConnected, getAccessToken]);
 
   const notifications = useMemo<Notification[]>(
     () =>
@@ -69,8 +78,10 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     if (!notifications.length) return;
     const newest = notifications[0].createdAt;
     setLastSeen(newest);
-    localStorage.setItem(SEEN_KEY, newest);
-  }, [notifications]);
+    getAccessToken()
+      .then((token) => token && markNotificationsRead(token, newest))
+      .catch((err) => console.warn('[Notifications] mark read failed:', err));
+  }, [notifications, getAccessToken]);
 
   return (
     <NotificationsContext.Provider value={{ notifications, unreadCount, markAllRead }}>
