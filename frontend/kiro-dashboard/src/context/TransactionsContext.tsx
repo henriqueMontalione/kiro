@@ -27,12 +27,16 @@ interface TransactionsState {
 const TransactionsContext = createContext<TransactionsState | null>(null);
 
 function toPayment(t: Transaction): WalletPayment {
+  const fee = t.fee_brl_amount ?? 0;
   return {
     id: t.id,
     hash: t.stellar_tx_hash ?? '',
     direction: t.direction,
     amount: stroopsToTesouro(t.tesouro_amount),
     amountBRL: centavosToBRL(t.brl_amount),
+    brlCentavos: t.brl_amount,
+    feeCentavos: fee,
+    feeBRL: centavosToBRL(fee),
     when: formatRelativeDate(t.created_at),
     createdAt: t.created_at,
   };

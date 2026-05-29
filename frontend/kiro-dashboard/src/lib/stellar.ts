@@ -78,6 +78,12 @@ export interface WalletPayment {
   amount: string;
   /** Pre-formatted BRL value, e.g. "R$ 100,00". */
   amountBRL: string;
+  /** Raw BRL in centavos — used for aggregations and charts. */
+  brlCentavos: number;
+  /** Fee charged on this transaction, in centavos. */
+  feeCentavos: number;
+  /** Pre-formatted fee, e.g. "R$ 0,50". */
+  feeBRL: string;
   /** Localized relative timestamp: "Hoje, 14:32" / "Ontem, 18:45" / "12 jan, 14:32". */
   when: string;
   /** ISO 8601 creation timestamp from Horizon. */
@@ -143,12 +149,13 @@ export async function fetchTesouroPayments(
 
       results.push({
         id: eff.id,
-        // Effects don't expose transaction_hash directly; we don't show it
-        // to end users anyway, so leave it blank.
         hash: '',
         direction: isCredit ? 'in' : 'out',
         amount: e.amount,
         amountBRL: formatBRL(e.amount),
+        brlCentavos: 0,
+        feeCentavos: 0,
+        feeBRL: 'R$ 0,00',
         when: formatRelativeDate(eff.created_at),
         createdAt: eff.created_at,
       });

@@ -147,10 +147,13 @@ export function ReceberPixModal({ open, onClose }: ReceberPixModalProps) {
               getAccessToken()
                 .then((token) => {
                   if (!token) return;
+                  const grossCentavos = Math.round(parseFloat(result.amountInFiat!) * 100);
+                  const feeCentavos = Math.round(parseFloat(result.feeAmountInFiat ?? '0') * 100);
                   return createTransaction(token, {
                     direction: 'in',
                     tesouro_amount: tesouroToStroops(result.amountInTokens!),
-                    brl_amount: Math.round(parseFloat(result.amountInFiat!) * 100),
+                    brl_amount: grossCentavos - feeCentavos,
+                    fee_brl_amount: feeCentavos,
                     stellar_tx_hash: claimedTxHash ?? undefined,
                     etherfuse_order_id: orderId,
                   }).then(() => refreshTxs());

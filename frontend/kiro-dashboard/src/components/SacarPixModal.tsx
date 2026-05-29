@@ -282,10 +282,12 @@ export function SacarPixModal({ open, onClose }: SacarPixModalProps) {
 
       const tesouroAmount = tesouroToStroops(quote.sourceAmount);
       const brlAmount = Math.round(parseFloat(quote.destinationAmount) * 100);
+      const feeCentavos = Math.round(parseFloat(quote.fee) * 100);
       createTransaction(authToken, {
         direction: 'out',
         tesouro_amount: tesouroAmount,
         brl_amount: brlAmount,
+        fee_brl_amount: feeCentavos,
         stellar_tx_hash: stellarTxHash,
         etherfuse_order_id: orderId,
       })

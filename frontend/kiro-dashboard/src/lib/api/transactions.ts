@@ -9,6 +9,8 @@ export interface Transaction {
   tesouro_amount: number;
   /** BRL in centavos (amount × 100). */
   brl_amount: number;
+  /** Fee charged by the exchange, in centavos. */
+  fee_brl_amount: number;
   stellar_tx_hash?: string;
   etherfuse_order_id?: string;
   status: string;
@@ -19,6 +21,7 @@ export interface CreateTransactionBody {
   direction: Direction;
   tesouro_amount: number;
   brl_amount: number;
+  fee_brl_amount?: number;
   stellar_tx_hash?: string;
   etherfuse_order_id?: string;
   status?: string;

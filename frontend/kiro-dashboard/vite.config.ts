@@ -456,6 +456,7 @@ function etherfuseApi(env: ApiEnv): Plugin {
               confirmedTxSignature: data.confirmedTxSignature ?? null,
               amountInTokens: data.amountInTokens ?? null,
               amountInFiat: data.amountInFiat ?? null,
+              feeAmountInFiat: data.feeAmountInFiat ?? null,
               // Stellar-only: present when the wallet lacked a trustline and
               // Etherfuse delivered via a claimable balance. The client must
               // sign and submit this XDR to add the trustline + claim tokens.

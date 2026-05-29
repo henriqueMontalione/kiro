@@ -176,6 +176,11 @@ function PaymentRow({ payment }: { payment: WalletPayment }) {
         <div className="min-w-0">
           <div className="text-[14px] text-[var(--fg-1)] font-medium truncate">{label}</div>
           <div className="k-money text-[11px] text-[var(--fg-3)] mt-[2px]">{payment.when}</div>
+          {payment.feeCentavos > 0 && (
+            <div className="k-money text-[11px] mt-[2px]" style={{ color: 'rgba(255,255,255,0.30)' }}>
+              Taxa: {payment.feeBRL}
+            </div>
+          )}
         </div>
         <div className="flex flex-col items-end gap-[6px]">
           <span
@@ -208,7 +213,14 @@ function PaymentRow({ payment }: { payment: WalletPayment }) {
         >
           <Icon size={18} strokeWidth={1.6} />
         </div>
-        <div className="text-[14px] text-[var(--fg-1)] font-medium">{label}</div>
+        <div>
+          <div className="text-[14px] text-[var(--fg-1)] font-medium">{label}</div>
+          {payment.feeCentavos > 0 && (
+            <div className="k-money text-[11px] mt-[2px]" style={{ color: 'rgba(255,255,255,0.30)' }}>
+              Taxa: {payment.feeBRL}
+            </div>
+          )}
+        </div>
         <div
           className="k-money text-[14px] text-right whitespace-nowrap"
           style={{ color: amountColor }}

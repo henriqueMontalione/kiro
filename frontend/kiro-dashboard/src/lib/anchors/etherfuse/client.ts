@@ -215,7 +215,10 @@ export interface OnRampPollResult {
   /** Stellar tx hash once TESOURO has been delivered. */
   confirmedTxSignature: string | null;
   amountInTokens: string | null;
+  /** Gross BRL amount the user deposited. */
   amountInFiat: string | null;
+  /** Fee charged by the exchange in BRL. Net received = amountInFiat − feeAmountInFiat. */
+  feeAmountInFiat: string | null;
   /**
    * Stellar-only. Present when the destination wallet lacked a TESOURO
    * trustline at order time: Etherfuse delivers via a claimable balance and
