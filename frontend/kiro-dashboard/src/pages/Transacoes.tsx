@@ -80,14 +80,12 @@ export default function Transacoes({ onReceive }: TransacoesProps) {
           >
             {exporting ? 'Exportando...' : 'Exportar CSV'}
           </Button>
-          {/* Mobile-only: desktop users already have the trigger on /recebimentos. */}
           {onReceive && (
             <Button
               variant="primary"
               size="sm"
               icon={Plus}
               onClick={onReceive}
-              className="md:hidden"
             >
               Novo recebimento
             </Button>
