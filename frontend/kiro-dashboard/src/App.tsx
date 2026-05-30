@@ -10,14 +10,12 @@ import { SacarPixModal } from '@/components/SacarPixModal';
 import { WalletSignModal } from '@/components/WalletSignModal';
 import { CompleteOnboardingModal } from '@/components/CompleteOnboardingModal';
 import Resumo from '@/pages/Resumo';
-// On /resumo, "Receber via PIX" triggers the off-ramp flow (TESOURO → BRL).
-// On /recebimentos, the same prop name still means "receive a customer payment"
-// — so each route wires the prop to a different handler.
+// On /resumo "Receber via PIX" triggers the off-ramp flow (TESOURO → BRL).
+// On /transacoes the same prop means "receive a customer payment" (on-ramp),
+// so each route wires onReceive to a different handler.
 import Transacoes from '@/pages/Transacoes';
-import Recebimentos from '@/pages/Recebimentos';
 import Configuracoes from '@/pages/Configuracoes';
 import MobileMais from '@/pages/MobileMais';
-import Placeholder from '@/pages/Placeholder';
 
 /**
  * Application shell.
@@ -71,14 +69,8 @@ export default function App() {
               <Route path="/" element={<Navigate to="/resumo" replace />} />
               <Route path="/resumo" element={<Resumo onReceive={openSacar} />} />
               <Route path="/transacoes" element={<Transacoes onReceive={openPix} />} />
-              <Route path="/recebimentos" element={<Recebimentos onReceive={openPix} />} />
-              <Route path="/extrato" element={<Placeholder name="Extrato" />} />
-              <Route path="/links" element={<Placeholder name="Links de Pagamento" />} />
-              <Route path="/clientes" element={<Placeholder name="Clientes" />} />
-              <Route path="/relatorios" element={<Placeholder name="Relatórios" />} />
-              <Route path="/integracoes" element={<Placeholder name="Integrações" />} />
-              <Route path="/config" element={<RequireAuth><Configuracoes /></RequireAuth>} />
               <Route path="/mais" element={<MobileMais />} />
+              <Route path="/config" element={<RequireAuth><Configuracoes /></RequireAuth>} />
               <Route path="*" element={<Navigate to="/resumo" replace />} />
             </Routes>
           </div>
