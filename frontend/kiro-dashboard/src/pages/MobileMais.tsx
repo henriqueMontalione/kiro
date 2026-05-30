@@ -124,26 +124,28 @@ export default function MobileMais() {
         </Card>
       </div>
 
-      <YieldCard />
+      <div className="flex flex-col gap-4 md:grid md:grid-cols-2 md:items-stretch">
+        <YieldCard />
 
-      <Card>
-        <div className="flex items-center justify-between gap-2 mb-1">
-          <div className="text-[11px] text-[var(--fg-3)] font-sans uppercase tracking-wider">Taxas pagas</div>
-          <button
-            type="button"
-            onClick={() => setFeeInfoOpen(true)}
-            className="flex items-center justify-center cursor-pointer"
-            style={{ background: 'none', border: 'none', padding: 0, color: 'var(--fg-3)' }}
-            aria-label="Sobre as taxas"
-          >
-            <Info size={14} strokeWidth={1.8} />
-          </button>
-        </div>
-        <div className="k-money text-[18px] font-semibold text-[var(--fg-1)]">
-          {isConnected && totalFeesCentavos != null ? fmtBRL(totalFeesCentavos / 100) : '—'}
-        </div>
-        <div className="text-[11px] text-[var(--fg-3)] mt-1">Total acumulado desde o início</div>
-      </Card>
+        <Card>
+          <div className="flex items-center justify-between gap-2 mb-1">
+            <div className="text-[11px] text-[var(--fg-3)] font-sans uppercase tracking-wider">Taxas pagas</div>
+            <button
+              type="button"
+              onClick={() => setFeeInfoOpen(true)}
+              className="flex items-center justify-center cursor-pointer"
+              style={{ background: 'none', border: 'none', padding: 0, color: 'var(--fg-3)' }}
+              aria-label="Sobre as taxas"
+            >
+              <Info size={14} strokeWidth={1.8} />
+            </button>
+          </div>
+          <div className="k-money text-[18px] font-semibold text-[var(--fg-1)]">
+            {isConnected && totalFeesCentavos != null ? fmtBRL(totalFeesCentavos / 100) : '—'}
+          </div>
+          <div className="text-[11px] text-[var(--fg-3)] mt-1">Total acumulado desde o início</div>
+        </Card>
+      </div>
 
       <Card>
         <div className="font-display text-[14px] font-semibold text-[var(--fg-1)] mb-4">
