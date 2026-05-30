@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"github.com/golang-migrate/migrate/v4"
-	_ "github.com/golang-migrate/migrate/v4/database/postgres"
+	_ "github.com/golang-migrate/migrate/v4/database/pgx/v5"
 	"github.com/golang-migrate/migrate/v4/source/iofs"
 )
 
@@ -20,25 +20,25 @@ import (
 // `files` is expected to be the embedded FS rooted directly at the SQL files
 // (i.e. `0001_init.up.sql` lives at "." inside the FS), as produced by the
 // migrations package's `//go:embed *.sql` directive.
+//
+// We use the pgx driver (under the "pgx5" URL scheme) instead of lib/pq so
+// migrations share the same SSL/auth behavior as the runtime pool. lib/pq is
+// strict about TLS — on Fly's internal Postgres link (.flycast, no TLS) it
+// fails the handshake with EOF. pgx prefers SSL but falls back automatically.
 func Up(databaseURL string, files fs.FS) error {
 	d, err := iofs.New(files, ".")
 	if err != nil {
 		return fmt.Errorf("migrate source: %w", err)
 	}
 
-	// Fly's internal Postgres link (.flycast) doesn't speak TLS, but lib/pq
-	// (used under the hood by golang-migrate) tries SSL by default and fails
-	// with EOF when the server refuses. Default to sslmode=disable; operators
-	// running against a TLS-enforcing Postgres can set it explicitly in the URL.
-	if !strings.Contains(databaseURL, "sslmode=") {
-		sep := "?"
-		if strings.Contains(databaseURL, "?") {
-			sep = "&"
-		}
-		databaseURL = databaseURL + sep + "sslmode=disable"
+	migrateURL := databaseURL
+	if strings.HasPrefix(migrateURL, "postgres://") {
+		migrateURL = "pgx5://" + strings.TrimPrefix(migrateURL, "postgres://")
+	} else if strings.HasPrefix(migrateURL, "postgresql://") {
+		migrateURL = "pgx5://" + strings.TrimPrefix(migrateURL, "postgresql://")
 	}
 
-	m, err := migrate.NewWithSourceInstance("iofs", d, databaseURL)
+	m, err := migrate.NewWithSourceInstance("iofs", d, migrateURL)
 	if err != nil {
 		return fmt.Errorf("migrate init: %w", err)
 	}
