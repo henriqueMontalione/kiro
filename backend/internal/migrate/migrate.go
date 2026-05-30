@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"strings"
 
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
@@ -23,6 +24,18 @@ func Up(databaseURL string, files fs.FS) error {
 	d, err := iofs.New(files, ".")
 	if err != nil {
 		return fmt.Errorf("migrate source: %w", err)
+	}
+
+	// Fly's internal Postgres link (.flycast) doesn't speak TLS, but lib/pq
+	// (used under the hood by golang-migrate) tries SSL by default and fails
+	// with EOF when the server refuses. Default to sslmode=disable; operators
+	// running against a TLS-enforcing Postgres can set it explicitly in the URL.
+	if !strings.Contains(databaseURL, "sslmode=") {
+		sep := "?"
+		if strings.Contains(databaseURL, "?") {
+			sep = "&"
+		}
+		databaseURL = databaseURL + sep + "sslmode=disable"
 	}
 
 	m, err := migrate.NewWithSourceInstance("iofs", d, databaseURL)
