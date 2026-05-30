@@ -17,16 +17,6 @@ export interface Transaction {
   created_at: string;
 }
 
-export interface CreateTransactionBody {
-  direction: Direction;
-  tesouro_amount: number;
-  brl_amount: number;
-  fee_brl_amount?: number;
-  stellar_tx_hash?: string;
-  etherfuse_order_id?: string;
-  status?: string;
-}
-
 async function request<T>(
   path: string,
   token: string,
@@ -115,18 +105,6 @@ export async function getTotalFees(token: string): Promise<number> {
     throw new Error(msg);
   }
   return (data as { total_fee_brl_amount: number } | null)?.total_fee_brl_amount ?? 0;
-}
-
-export async function createTransaction(token: string, body: CreateTransactionBody): Promise<Transaction> {
-  const { status, data } = await request<Transaction>('/api/me/transactions', token, {
-    method: 'POST',
-    body: JSON.stringify(body),
-  });
-  if (status >= 400) {
-    const msg = (data as { error?: string } | null)?.error ?? `HTTP ${status}`;
-    throw new Error(msg);
-  }
-  return data as Transaction;
 }
 
 /** Converts stroops (BIGINT in DB) to decimal TESOURO string with 7 places. */

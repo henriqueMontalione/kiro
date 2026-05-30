@@ -6,7 +6,6 @@ import { TesouroInfoModal } from './TesouroInfoModal';
 import { useWallet } from '@/context/WalletContext';
 import { formatBRL, submitXdr } from '@/lib/stellar';
 import { usePrivy } from '@privy-io/react-auth';
-import { createTransaction, tesouroToStroops } from '@/lib/api/transactions';
 import { useTransactions } from '@/context/TransactionsContext';
 import {
   startOnboarding,
@@ -129,7 +128,6 @@ export function ReceberPixModal({ open, onClose }: ReceberPixModalProps) {
                 claimXdr = await regenerateClaimXdr(orderId);
               } catch { /* no claimable balance — proceed without claim */ }
             }
-            let claimedTxHash = result.confirmedTxSignature ?? null;
             if (claimXdr) {
               setStep('claiming');
               try {
@@ -137,7 +135,7 @@ export function ReceberPixModal({ open, onClose }: ReceberPixModalProps) {
                 const [signedXdr, authToken] = await Promise.all([signTransaction(claimXdr), getAccessToken()]);
                 if (!authToken) throw new Error('Sessão expirada. Faça login novamente.');
                 setClaimingMsg('Finalizando...');
-                claimedTxHash = await submitXdr(signedXdr, authToken);
+                await submitXdr(signedXdr, authToken);
               } catch (err) {
                 setErrorMsg(err instanceof Error ? err.message : 'Erro ao reivindicar TESOURO');
                 setStep('error');
@@ -145,24 +143,8 @@ export function ReceberPixModal({ open, onClose }: ReceberPixModalProps) {
               }
             }
             refreshBalance().catch(() => { /* silent */ });
-
-            if (result.amountInTokens && result.amountInFiat) {
-              getAccessToken()
-                .then((token) => {
-                  if (!token) return;
-                  const grossCentavos = Math.round(parseFloat(result.amountInFiat!) * 100);
-                  const feeCentavos = Math.round(parseFloat(result.feeAmountInFiat ?? '0') * 100);
-                  return createTransaction(token, {
-                    direction: 'in',
-                    tesouro_amount: tesouroToStroops(result.amountInTokens!),
-                    brl_amount: grossCentavos - feeCentavos,
-                    fee_brl_amount: feeCentavos,
-                    stellar_tx_hash: claimedTxHash ?? undefined,
-                    etherfuse_order_id: orderId,
-                  }).then(() => refreshTxs());
-                })
-                .catch((err) => console.warn('[ReceberPixModal] createTransaction failed:', err));
-            }
+            refreshTxs();
+            window.setTimeout(() => refreshTxs(), 3000);
 
             setStep('done');
           } else if (result.status === 'failed' || result.status === 'canceled') {
