@@ -15,6 +15,10 @@ export interface UserProfile {
    *  hasn't uploaded a profile photo / store logo yet. Decrypted server-side
    *  on every GET /api/me. */
   photo_data_url: string | null;
+  /** Etherfuse identifiers persisted server-side so the ramp webhook can
+   *  attribute order events to this merchant. Populated on first onboarding. */
+  etherfuse_customer_id: string | null;
+  etherfuse_bank_account_id: string | null;
   status: string;
   created_at: string;
   updated_at: string;
@@ -37,6 +41,8 @@ export interface CreateMeBody {
 export interface UpdateMeBody {
   store_name?: string;
   pix_key?: string;
+  etherfuse_customer_id?: string;
+  etherfuse_bank_account_id?: string;
 }
 
 async function request<T>(

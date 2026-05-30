@@ -8,6 +8,7 @@ import {
 } from 'react';
 import { getQuote, startOnboarding } from '@/lib/anchors/etherfuse/client';
 import { useDashboard } from './DashboardContext';
+import { useUserProfile } from './UserProfileContext';
 import { useWallet } from './WalletContext';
 
 // Bumped from v1 → v2 after a proxy bug cached rate=1 (1 TESOURO == 1 BRL),
@@ -15,8 +16,6 @@ import { useWallet } from './WalletContext';
 // fresh fetch and ignores the broken cached value on next load.
 const RATE_KEY = 'kiro_brl_per_tesouro_v2';
 const LEGACY_RATE_KEY = 'kiro_brl_per_tesouro';
-const CUSTOMER_KEY = 'kiro_ef_customer_id';
-const BANK_ACCOUNT_KEY = 'kiro_ef_bank_account_id';
 const POLL_MS = 5 * 60 * 1000;
 
 // One-shot migration: drop the legacy key so it doesn't linger forever.
@@ -42,6 +41,7 @@ function formatBRLNumber(num: number): string {
 export function QuoteProvider({ children }: { children: ReactNode }) {
   const { refreshTick } = useDashboard();
   const { isConnected, publicKey } = useWallet();
+  const { etherfuseCustomerId, setEtherfuseIds } = useUserProfile();
   const [brlPerTesouro, setRate] = useState<number | null>(() => {
     const stored = localStorage.getItem(RATE_KEY);
     if (!stored) return null;
@@ -50,13 +50,13 @@ export function QuoteProvider({ children }: { children: ReactNode }) {
   });
 
   const fetchRate = useCallback(async () => {
-    let customerId = localStorage.getItem(CUSTOMER_KEY);
+    let customerId = etherfuseCustomerId;
 
-    // Recover (or create) the customerId proactively when it's missing. The
+    // Recover (or create) the customerId proactively when it's missing — the
     // Etherfuse onboarding endpoint returns the existing customerId for any
-    // wallet that was already onboarded — same recovery path SacarPixModal
-    // relies on. This means the BalanceCard can show a real BRL value right
-    // after login, without forcing the lojista to open Sacar/Receber first.
+    // wallet already onboarded, so we can call it idempotently. Persisting
+    // the result on our backend means BalanceCard shows a real BRL value
+    // right after login, without forcing the lojista to open Sacar/Receber.
     if (!customerId && publicKey) {
       try {
         const result = await startOnboarding(
@@ -65,8 +65,10 @@ export function QuoteProvider({ children }: { children: ReactNode }) {
           publicKey,
         );
         customerId = result.customerId;
-        localStorage.setItem(CUSTOMER_KEY, result.customerId);
-        localStorage.setItem(BANK_ACCOUNT_KEY, result.bankAccountId);
+        await setEtherfuseIds({
+          customerId: result.customerId,
+          bankAccountId: result.bankAccountId,
+        });
       } catch (err) {
         console.warn('[QuoteContext] customerId recovery failed:', err);
         return;
@@ -87,18 +89,13 @@ export function QuoteProvider({ children }: { children: ReactNode }) {
     } catch (err) {
       console.warn('[QuoteContext] fetchRate failed:', err);
     }
-  }, [publicKey]);
+  }, [publicKey, etherfuseCustomerId, setEtherfuseIds]);
 
   // Single source of truth: only fetch when the wallet is connected.
   // QuoteProvider mounts above the auth gate, so without this guard we'd
-  // hit /api/ef-quote (and start the poll) before the user even logs in
-  // — wasting a request and leaking the leftover customerId to the proxy.
+  // hit /api/ef-quote (and start the poll) before the user even logs in.
   useEffect(() => {
-    if (!isConnected) {
-      localStorage.removeItem(CUSTOMER_KEY);
-      localStorage.removeItem(BANK_ACCOUNT_KEY);
-      return;
-    }
+    if (!isConnected) return;
     fetchRate();
     const id = setInterval(fetchRate, POLL_MS);
     return () => clearInterval(id);
@@ -107,14 +104,6 @@ export function QuoteProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (isConnected && refreshTick > 0) fetchRate();
   }, [refreshTick, isConnected, fetchRate]);
-
-  // Triggered when ReceberPixModal / SacarPixModal first stores a customerId —
-  // lets the quote fetch immediately instead of waiting for the next poll tick.
-  useEffect(() => {
-    const handler = () => fetchRate();
-    window.addEventListener('kiro:customerIdReady', handler);
-    return () => window.removeEventListener('kiro:customerIdReady', handler);
-  }, [fetchRate]);
 
   const formatTesouroAsBRL = useCallback(
     (tesouro: string | number): string | null => {

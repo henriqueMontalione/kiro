@@ -7,6 +7,7 @@ import { useWallet } from '@/context/WalletContext';
 import { formatBRL, submitXdr } from '@/lib/stellar';
 import { usePrivy } from '@privy-io/react-auth';
 import { useTransactions } from '@/context/TransactionsContext';
+import { useUserProfile } from '@/context/UserProfileContext';
 import {
   startOnboarding,
   getKycStatus,
@@ -36,11 +37,6 @@ type Step =
   | 'done'
   | 'error';
 
-// Same localStorage keys as SacarPixModal — KYC + bank account are shared
-// across on-ramp and off-ramp for the same wallet.
-const CUSTOMER_KEY = 'kiro_ef_customer_id';
-const BANK_ACCOUNT_KEY = 'kiro_ef_bank_account_id';
-
 interface ReceberPixModalProps {
   open: boolean;
   onClose: () => void;
@@ -50,6 +46,7 @@ export function ReceberPixModal({ open, onClose }: ReceberPixModalProps) {
   const { isConnected, publicKey, connect, signTransaction, refreshBalance } = useWallet();
   const { getAccessToken } = usePrivy();
   const { refresh: refreshTxs } = useTransactions();
+  const { etherfuseCustomerId, etherfuseBankAccountId, setEtherfuseIds } = useUserProfile();
 
   const [step, setStep] = useState<Step>('loading');
   const [kycUrl, setKycUrl] = useState('');
@@ -164,8 +161,8 @@ export function ReceberPixModal({ open, onClose }: ReceberPixModalProps) {
       cancelRef.current = false;
       stopPolls();
 
-      let customerId = localStorage.getItem(CUSTOMER_KEY) ?? '';
-      let bankAccId = localStorage.getItem(BANK_ACCOUNT_KEY) ?? '';
+      let customerId = etherfuseCustomerId ?? '';
+      let bankAccId = etherfuseBankAccountId ?? '';
 
       try {
         if (customerId && bankAccId) {
@@ -174,9 +171,9 @@ export function ReceberPixModal({ open, onClose }: ReceberPixModalProps) {
           if (kycStatus === 'approved') {
             try {
               const accounts = await getBankAccounts(customerId);
-              if (accounts.length > 0) {
+              if (accounts.length > 0 && accounts[0].id !== bankAccId) {
                 bankAccId = accounts[0].id;
-                localStorage.setItem(BANK_ACCOUNT_KEY, bankAccId);
+                await setEtherfuseIds({ bankAccountId: bankAccId });
               }
             } catch { /* keep stored ID */ }
             customerIdRef.current = customerId;
@@ -203,9 +200,7 @@ export function ReceberPixModal({ open, onClose }: ReceberPixModalProps) {
         const result = await startOnboarding(customerId, bankAccId, pubkey);
         customerId = result.customerId;
         bankAccId = result.bankAccountId;
-        localStorage.setItem(CUSTOMER_KEY, customerId);
-        localStorage.setItem(BANK_ACCOUNT_KEY, bankAccId);
-        window.dispatchEvent(new Event('kiro:customerIdReady'));
+        await setEtherfuseIds({ customerId, bankAccountId: bankAccId });
         customerIdRef.current = customerId;
         bankAccountIdRef.current = bankAccId;
 
@@ -213,9 +208,9 @@ export function ReceberPixModal({ open, onClose }: ReceberPixModalProps) {
         if (kycStatus === 'approved') {
           try {
             const accounts = await getBankAccounts(customerId);
-            if (accounts.length > 0) {
+            if (accounts.length > 0 && accounts[0].id !== bankAccountIdRef.current) {
               bankAccountIdRef.current = accounts[0].id;
-              localStorage.setItem(BANK_ACCOUNT_KEY, accounts[0].id);
+              await setEtherfuseIds({ bankAccountId: accounts[0].id });
             }
           } catch { /* keep */ }
           setStep('amount');
@@ -239,7 +234,7 @@ export function ReceberPixModal({ open, onClose }: ReceberPixModalProps) {
         setStep('error');
       }
     },
-    [stopPolls, startKycPolling],
+    [stopPolls, startKycPolling, etherfuseCustomerId, etherfuseBankAccountId, setEtherfuseIds],
   );
 
   useEffect(() => {
@@ -359,9 +354,9 @@ export function ReceberPixModal({ open, onClose }: ReceberPixModalProps) {
         stopPolls();
         try {
           const accounts = await getBankAccounts(customerIdRef.current);
-          if (accounts.length > 0) {
+          if (accounts.length > 0 && accounts[0].id !== bankAccountIdRef.current) {
             bankAccountIdRef.current = accounts[0].id;
-            localStorage.setItem(BANK_ACCOUNT_KEY, accounts[0].id);
+            await setEtherfuseIds({ bankAccountId: accounts[0].id });
           }
         } catch { /* keep current ID */ }
         setStep('amount');
@@ -395,9 +390,7 @@ export function ReceberPixModal({ open, onClose }: ReceberPixModalProps) {
       );
       customerIdRef.current = result.customerId;
       bankAccountIdRef.current = result.bankAccountId;
-      localStorage.setItem(CUSTOMER_KEY, result.customerId);
-      localStorage.setItem(BANK_ACCOUNT_KEY, result.bankAccountId);
-      window.dispatchEvent(new Event('kiro:customerIdReady'));
+      await setEtherfuseIds({ customerId: result.customerId, bankAccountId: result.bankAccountId });
       setKycUrl(result.kycUrl);
       setStep('kyc');
     } catch (err) {

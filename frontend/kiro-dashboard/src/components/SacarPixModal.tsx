@@ -8,6 +8,7 @@ import { useQuote } from '@/context/QuoteContext';
 import { formatBRL, submitXdr } from '@/lib/stellar';
 import { usePrivy } from '@privy-io/react-auth';
 import { useTransactions } from '@/context/TransactionsContext';
+import { useUserProfile } from '@/context/UserProfileContext';
 import {
   startOnboarding,
   getKycStatus,
@@ -33,9 +34,6 @@ type Step =
   | 'done'
   | 'error';
 
-const CUSTOMER_KEY = 'kiro_ef_customer_id';
-const BANK_ACCOUNT_KEY = 'kiro_ef_bank_account_id';
-
 interface SacarPixModalProps {
   open: boolean;
   onClose: () => void;
@@ -46,6 +44,7 @@ export function SacarPixModal({ open, onClose }: SacarPixModalProps) {
   const { getAccessToken } = usePrivy();
   const { brlPerTesouro, brlToTesouro, formatTesouroAsBRL, refresh: refreshRate } = useQuote();
   const { refresh: refreshTxs } = useTransactions();
+  const { etherfuseCustomerId, etherfuseBankAccountId, setEtherfuseIds } = useUserProfile();
 
   const [step, setStep] = useState<Step>('loading');
   const [kycUrl, setKycUrl] = useState('');
@@ -101,8 +100,8 @@ export function SacarPixModal({ open, onClose }: SacarPixModalProps) {
       cancelRef.current = false;
       stopKycPolling();
 
-      let customerId = localStorage.getItem(CUSTOMER_KEY) ?? '';
-      let bankAccId = localStorage.getItem(BANK_ACCOUNT_KEY) ?? '';
+      let customerId = etherfuseCustomerId ?? '';
+      let bankAccId = etherfuseBankAccountId ?? '';
 
       try {
         // Fast path: if we have stored IDs, check KYC first to skip onboarding when approved.
@@ -112,9 +111,9 @@ export function SacarPixModal({ open, onClose }: SacarPixModalProps) {
           if (kycStatus === 'approved') {
             try {
               const accounts = await getBankAccounts(customerId);
-              if (accounts.length > 0) {
+              if (accounts.length > 0 && accounts[0].id !== bankAccId) {
                 bankAccId = accounts[0].id;
-                localStorage.setItem(BANK_ACCOUNT_KEY, bankAccId);
+                await setEtherfuseIds({ bankAccountId: bankAccId });
               }
             } catch { /* keep stored ID */ }
             customerIdRef.current = customerId;
@@ -144,9 +143,7 @@ export function SacarPixModal({ open, onClose }: SacarPixModalProps) {
         const result = await startOnboarding(customerId, bankAccId, pubkey);
         customerId = result.customerId;
         bankAccId = result.bankAccountId;
-        localStorage.setItem(CUSTOMER_KEY, customerId);
-        localStorage.setItem(BANK_ACCOUNT_KEY, bankAccId);
-        window.dispatchEvent(new Event('kiro:customerIdReady'));
+        await setEtherfuseIds({ customerId, bankAccountId: bankAccId });
         customerIdRef.current = customerId;
         bankAccountIdRef.current = bankAccId;
 
@@ -156,9 +153,9 @@ export function SacarPixModal({ open, onClose }: SacarPixModalProps) {
         if (kycStatus === 'approved') {
           try {
             const accounts = await getBankAccounts(customerId);
-            if (accounts.length > 0) {
+            if (accounts.length > 0 && accounts[0].id !== bankAccountIdRef.current) {
               bankAccountIdRef.current = accounts[0].id;
-              localStorage.setItem(BANK_ACCOUNT_KEY, accounts[0].id);
+              await setEtherfuseIds({ bankAccountId: accounts[0].id });
             }
           } catch { /* keep current ID */ }
           setStep('amount');
@@ -183,7 +180,7 @@ export function SacarPixModal({ open, onClose }: SacarPixModalProps) {
         setStep('error');
       }
     },
-    [stopKycPolling, startKycPolling],
+    [stopKycPolling, startKycPolling, etherfuseCustomerId, etherfuseBankAccountId, setEtherfuseIds],
   );
 
   // On open: reset transient state and start flow
@@ -333,9 +330,9 @@ export function SacarPixModal({ open, onClose }: SacarPixModalProps) {
         stopKycPolling();
         try {
           const accounts = await getBankAccounts(customerIdRef.current);
-          if (accounts.length > 0) {
+          if (accounts.length > 0 && accounts[0].id !== bankAccountIdRef.current) {
             bankAccountIdRef.current = accounts[0].id;
-            localStorage.setItem(BANK_ACCOUNT_KEY, accounts[0].id);
+            await setEtherfuseIds({ bankAccountId: accounts[0].id });
           }
         } catch { /* keep current ID */ }
         setStep('amount');
@@ -369,9 +366,7 @@ export function SacarPixModal({ open, onClose }: SacarPixModalProps) {
       );
       customerIdRef.current = result.customerId;
       bankAccountIdRef.current = result.bankAccountId;
-      localStorage.setItem(CUSTOMER_KEY, result.customerId);
-      localStorage.setItem(BANK_ACCOUNT_KEY, result.bankAccountId);
-      window.dispatchEvent(new Event('kiro:customerIdReady'));
+      await setEtherfuseIds({ customerId: result.customerId, bankAccountId: result.bankAccountId });
       setKycUrl(result.kycUrl);
       setStep('kyc');
     } catch (err) {

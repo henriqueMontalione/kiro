@@ -44,11 +44,18 @@ interface UserProfileState {
   /** Data URL or null. Source of truth is the backend (encrypted PII column);
    *  never read from or written to browser storage. */
   photoUrl: string | null;
+  /** Etherfuse identifiers persisted on the backend. Reading from here keeps
+   *  the ramp flow consistent across devices and survives localStorage wipes. */
+  etherfuseCustomerId: string | null;
+  etherfuseBankAccountId: string | null;
 
   /** Persists the new photo (or null to remove) on the backend. */
   setPhotoUrl: (url: string | null) => Promise<void>;
   /** PATCH /api/me with a new store_name. Updates the local profile on success. */
   setName: (name: string) => Promise<void>;
+  /** Persists Etherfuse customer / bank-account IDs on the backend so the
+   *  webhook can map incoming events to this merchant. */
+  setEtherfuseIds: (ids: { customerId?: string; bankAccountId?: string }) => Promise<void>;
   /** Submits the cadastro form on first login. Promotes status → 'ready' on success. */
   completeOnboarding: (body: Omit<CreateMeBody, 'stellar_public_key'>) => Promise<void>;
   /** Re-fetches the profile from the backend. */
@@ -146,12 +153,28 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
     [getAccessToken],
   );
 
+  const setEtherfuseIds = useCallback(
+    async (ids: { customerId?: string; bankAccountId?: string }) => {
+      const body: { etherfuse_customer_id?: string; etherfuse_bank_account_id?: string } = {};
+      if (ids.customerId) body.etherfuse_customer_id = ids.customerId;
+      if (ids.bankAccountId) body.etherfuse_bank_account_id = ids.bankAccountId;
+      if (!body.etherfuse_customer_id && !body.etherfuse_bank_account_id) return;
+      const token = await getAccessToken();
+      if (!token) throw new Error('Sessão expirada. Faça login novamente.');
+      const updated = await updateMe(token, body);
+      setProfile(updated);
+    },
+    [getAccessToken],
+  );
+
   // Derived display fields. When the profile isn't loaded yet, we fall back to
   // the Privy email so the dashboard doesn't render with empty placeholders.
   const name = profile?.store_name ?? '';
   const email = profile?.email ?? user?.email?.address ?? '';
   const initials = profile ? deriveInitials(profile.store_name) : '?';
   const photoUrl = profile?.photo_data_url ?? null;
+  const etherfuseCustomerId = profile?.etherfuse_customer_id ?? null;
+  const etherfuseBankAccountId = profile?.etherfuse_bank_account_id ?? null;
 
   return (
     <UserProfileContext.Provider
@@ -164,8 +187,11 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
         role: 'Merchant',
         initials,
         photoUrl,
+        etherfuseCustomerId,
+        etherfuseBankAccountId,
         setPhotoUrl,
         setName,
+        setEtherfuseIds,
         completeOnboarding,
         refresh: fetchProfile,
       }}
