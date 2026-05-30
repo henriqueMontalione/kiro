@@ -94,7 +94,7 @@ export const PAYMENT_LINKS: PaymentLink[] = [
 export const NAV_ITEMS: NavItem[] = [
   { id: 'resumo', label: 'Resumo', icon: 'House', to: '/resumo' },
   { id: 'transacoes', label: 'Transações', icon: 'ArrowLeftRight', to: '/transacoes' },
-  { id: 'analise', label: 'Análise', icon: 'BarChart3', to: '/mais' }
+  { id: 'analise', label: 'Análise', icon: 'BarChart3', to: '/mais' },
   { id: 'config', label: 'Configurações', icon: 'Settings', to: '/config' },
 ];
 
