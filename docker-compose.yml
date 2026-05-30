@@ -44,6 +44,7 @@ services:
       PRIVY_APP_ID: ${VITE_PRIVY_APP_ID}
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:5173}
       PII_MASTER_KEY: ${PII_MASTER_KEY}
+      ETHERFUSE_WEBHOOK_SECRET: ${ETHERFUSE_WEBHOOK_SECRET:-}
     depends_on:
       db:
         condition: service_healthy
