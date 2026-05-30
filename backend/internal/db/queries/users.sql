@@ -1,5 +1,5 @@
 -- name: GetUserByPrivyID :one
-SELECT id, privy_user_id, store_name_enc, cnpj_enc, cnpj_hash, email_enc, pix_key_enc, stellar_public_key, status, created_at, updated_at
+SELECT id, privy_user_id, store_name_enc, cnpj_enc, cnpj_hash, email_enc, pix_key_enc, stellar_public_key, photo_enc, status, created_at, updated_at
 FROM users
 WHERE privy_user_id = $1 AND status = 'active';
 
@@ -9,7 +9,7 @@ INSERT INTO users (
 ) VALUES (
     $1, $2, $3, $4, $5, $6, $7, $8
 )
-RETURNING id, privy_user_id, store_name_enc, cnpj_enc, cnpj_hash, email_enc, pix_key_enc, stellar_public_key, status, created_at, updated_at;
+RETURNING id, privy_user_id, store_name_enc, cnpj_enc, cnpj_hash, email_enc, pix_key_enc, stellar_public_key, photo_enc, status, created_at, updated_at;
 
 -- name: UpdateUser :one
 UPDATE users
@@ -18,7 +18,13 @@ SET
     pix_key_enc    = COALESCE(sqlc.narg('pix_key_enc'), pix_key_enc),
     updated_at     = NOW()
 WHERE privy_user_id = $1 AND status = 'active'
-RETURNING id, privy_user_id, store_name_enc, cnpj_enc, cnpj_hash, email_enc, pix_key_enc, stellar_public_key, status, created_at, updated_at;
+RETURNING id, privy_user_id, store_name_enc, cnpj_enc, cnpj_hash, email_enc, pix_key_enc, stellar_public_key, photo_enc, status, created_at, updated_at;
+
+-- name: UpdateUserPhoto :one
+UPDATE users
+SET photo_enc = $2, updated_at = NOW()
+WHERE privy_user_id = $1 AND status = 'active'
+RETURNING id, privy_user_id, store_name_enc, cnpj_enc, cnpj_hash, email_enc, pix_key_enc, stellar_public_key, photo_enc, status, created_at, updated_at;
 
 -- name: SoftDeleteUser :exec
 UPDATE users

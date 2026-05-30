@@ -34,6 +34,7 @@ type userResponse struct {
 	Email            string    `json:"email"`
 	PixKey           string    `json:"pix_key"`
 	StellarPublicKey string    `json:"stellar_public_key"`
+	PhotoDataURL     *string   `json:"photo_data_url"`
 	Status           string    `json:"status"`
 	CreatedAt        string    `json:"created_at"`
 	UpdatedAt        string    `json:"updated_at"`
@@ -56,6 +57,16 @@ func (s *Server) toResponse(u sqlc.User) (userResponse, error) {
 	if err != nil {
 		return userResponse{}, fmt.Errorf("decrypt pix_key: %w", err)
 	}
+
+	var photoDataURL *string
+	if len(u.PhotoEnc) > 0 {
+		decoded, err := s.vault.Decrypt(u.PhotoEnc)
+		if err != nil {
+			return userResponse{}, fmt.Errorf("decrypt photo: %w", err)
+		}
+		photoDataURL = &decoded
+	}
+
 	return userResponse{
 		ID:               u.ID,
 		StoreName:        storeName,
@@ -63,6 +74,7 @@ func (s *Server) toResponse(u sqlc.User) (userResponse, error) {
 		Email:            email,
 		PixKey:           pixKey,
 		StellarPublicKey: u.StellarPublicKey,
+		PhotoDataURL:     photoDataURL,
 		Status:           u.Status,
 		CreatedAt:        u.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 		UpdatedAt:        u.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
@@ -302,6 +314,90 @@ func (s *Server) updateMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, resp)
+}
+
+type updateMyPhotoBody struct {
+	PhotoDataURL *string `json:"photo_data_url"`
+}
+
+// Max bytes of the raw data URL (before encryption). Generous ceiling so
+// a 512x512 JPEG at quality 0.85 fits with room to spare. The frontend
+// compresses client-side, so legitimate uploads land well below this.
+const maxPhotoDataURLBytes = 750 * 1024
+
+func (s *Server) putMyPhoto(w http.ResponseWriter, r *http.Request) {
+	identity := identityFrom(r.Context())
+	if identity == nil {
+		writeError(w, http.StatusUnauthorized, "Não autorizado")
+		return
+	}
+
+	var body updateMyPhotoBody
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxPhotoDataURLBytes+8*1024)).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, "Corpo da requisição inválido")
+		return
+	}
+
+	var photoEnc []byte
+	if body.PhotoDataURL != nil {
+		if msg := validatePhotoDataURL(*body.PhotoDataURL); msg != "" {
+			writeError(w, http.StatusBadRequest, msg)
+			return
+		}
+		enc, err := s.vault.Encrypt(*body.PhotoDataURL)
+		if err != nil {
+			s.logger.Printf("putMyPhoto encrypt: %v", err)
+			writeError(w, http.StatusInternalServerError, "Erro interno")
+			return
+		}
+		photoEnc = enc
+	}
+
+	user, err := s.queries.UpdateUserPhoto(r.Context(), sqlc.UpdateUserPhotoParams{
+		PrivyUserID: identity.DID,
+		PhotoEnc:    photoEnc,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		writeError(w, http.StatusNotFound, "Cadastro não encontrado")
+		return
+	}
+	if err != nil {
+		s.logger.Printf("putMyPhoto: %v", err)
+		writeError(w, http.StatusInternalServerError, "Erro interno")
+		return
+	}
+
+	resp, err := s.toResponse(user)
+	if err != nil {
+		s.logger.Printf("putMyPhoto decrypt: %v", err)
+		writeError(w, http.StatusInternalServerError, "Erro interno")
+		return
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+// validatePhotoDataURL ensures the incoming string is a well-formed data URL
+// for a supported image type. Block SVG explicitly: it's text/script-capable
+// and shouldn't enter the avatar pipeline.
+func validatePhotoDataURL(s string) string {
+	if len(s) == 0 {
+		return "Foto inválida"
+	}
+	if len(s) > maxPhotoDataURLBytes {
+		return "Imagem muito grande. Tente outra com menos resolução."
+	}
+	allowed := []string{"data:image/jpeg;base64,", "data:image/png;base64,", "data:image/webp;base64,"}
+	ok := false
+	for _, prefix := range allowed {
+		if strings.HasPrefix(s, prefix) {
+			ok = true
+			break
+		}
+	}
+	if !ok {
+		return "Formato de imagem não suportado"
+	}
+	return ""
 }
 
 func (s *Server) deleteMe(w http.ResponseWriter, r *http.Request) {

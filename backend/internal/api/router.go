@@ -60,6 +60,7 @@ func NewRouter(cfg *config.Config, pool *pgxpool.Pool, verifier *auth.Verifier, 
 		r.Post("/", s.createMe)
 		r.Patch("/", s.updateMe)
 		r.Delete("/", s.deleteMe)
+		r.Put("/photo", s.putMyPhoto)
 		r.Get("/consent", s.listMyConsents)
 		r.Post("/consent", s.postConsent)
 		r.Get("/transactions", s.listTransactions)

@@ -15,6 +15,7 @@ type User struct {
 	EmailEnc         []byte    `json:"-"`
 	PixKeyEnc        []byte    `json:"-"`
 	StellarPublicKey string    `json:"stellar_public_key"`
+	PhotoEnc         []byte    `json:"-"`
 	Status           string    `json:"status"`
 	CreatedAt        time.Time `json:"created_at"`
 	UpdatedAt        time.Time `json:"updated_at"`
