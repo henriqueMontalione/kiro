@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { ChevronRight, ShoppingBag, ShoppingCart, ArrowLeftRight, ArrowUpRight } from 'lucide-react';
 import { Card, CardEyebrow } from '../Card';
 import { StatusTag, type Status } from '../StatusTag';
@@ -106,6 +106,14 @@ function EmptyState({ message }: { message: string }) {
 }
 
 function WalletPaymentRow({ payment, valuesHidden }: { payment: WalletPayment; valuesHidden: boolean }) {
+  const [pressing, setPressing] = useState(false);
+  const revealed = !valuesHidden || pressing;
+
+  const startPress = () => {
+    if (valuesHidden) setPressing(true);
+  };
+  const endPress = () => setPressing(false);
+
   const isOut = payment.direction === 'out';
   const Icon = isOut ? ArrowUpRight : ShoppingBag;
   const label = isOut ? 'Saque via PIX' : 'Pagamento recebido';
@@ -117,6 +125,19 @@ function WalletPaymentRow({ payment, valuesHidden }: { payment: WalletPayment; v
         gridTemplateColumns: '36px 1fr auto 110px 100px',
         gap: 16,
         padding: '14px 12px',
+        WebkitUserSelect: 'none',
+        userSelect: 'none',
+        WebkitTouchCallout: 'none',
+        touchAction: 'manipulation',
+      }}
+      onMouseDown={startPress}
+      onMouseUp={endPress}
+      onMouseLeave={endPress}
+      onTouchStart={startPress}
+      onTouchEnd={endPress}
+      onTouchCancel={endPress}
+      onContextMenu={(e) => {
+        if (valuesHidden) e.preventDefault();
       }}
     >
       <div
@@ -135,9 +156,8 @@ function WalletPaymentRow({ payment, valuesHidden }: { payment: WalletPayment; v
         className="k-money text-[14px] text-right"
         style={{
           color: isOut ? '#FF4D6D' : 'var(--fg-1)',
-          filter: valuesHidden ? 'blur(6px)' : 'none',
+          filter: revealed ? 'none' : 'blur(6px)',
           transition: 'filter 200ms ease-out',
-          userSelect: valuesHidden ? 'none' : 'auto',
         }}
       >
         {isOut ? '− ' : '+ '}

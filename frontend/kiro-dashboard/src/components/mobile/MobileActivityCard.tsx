@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { ChevronRight, ShoppingBag, ArrowUpRight } from 'lucide-react';
 import { Card } from '../Card';
 import { useWallet } from '@/context/WalletContext';
@@ -99,6 +99,14 @@ function MobileSkeleton({ count }: { count: number }) {
 }
 
 function ActivityRow({ payment, valuesHidden }: { payment: WalletPayment; valuesHidden: boolean }) {
+  const [pressing, setPressing] = useState(false);
+  const revealed = !valuesHidden || pressing;
+
+  const startPress = () => {
+    if (valuesHidden) setPressing(true);
+  };
+  const endPress = () => setPressing(false);
+
   const isOut = payment.direction === 'out';
   const Icon = isOut ? ArrowUpRight : ShoppingBag;
   const label = isOut ? 'Saque via PIX' : 'Pagamento recebido';
@@ -110,7 +118,24 @@ function ActivityRow({ payment, valuesHidden }: { payment: WalletPayment; values
   return (
     <div
       className="flex items-center gap-3 rounded-[12px]"
-      style={{ padding: '10px 4px', minHeight: 56 }}
+      style={{
+        padding: '10px 4px',
+        minHeight: 56,
+        cursor: valuesHidden ? 'pointer' : 'default',
+        WebkitUserSelect: 'none',
+        userSelect: 'none',
+        WebkitTouchCallout: 'none',
+        touchAction: 'manipulation',
+      }}
+      onMouseDown={startPress}
+      onMouseUp={endPress}
+      onMouseLeave={endPress}
+      onTouchStart={startPress}
+      onTouchEnd={endPress}
+      onTouchCancel={endPress}
+      onContextMenu={(e) => {
+        if (valuesHidden) e.preventDefault();
+      }}
     >
       <div
         className="flex items-center justify-center rounded-[10px] flex-shrink-0"
@@ -126,9 +151,8 @@ function ActivityRow({ payment, valuesHidden }: { payment: WalletPayment; values
         className="k-money text-[14px] font-medium whitespace-nowrap"
         style={{
           color: amountColor,
-          filter: valuesHidden ? 'blur(6px)' : 'none',
+          filter: revealed ? 'none' : 'blur(6px)',
           transition: 'filter 200ms ease-out',
-          userSelect: valuesHidden ? 'none' : 'auto',
         }}
       >
         {isOut ? '− ' : '+ '}
