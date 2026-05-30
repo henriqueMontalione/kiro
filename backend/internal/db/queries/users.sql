@@ -3,6 +3,14 @@ SELECT id, privy_user_id, store_name_enc, cnpj_enc, cnpj_hash, email_enc, pix_ke
 FROM users
 WHERE privy_user_id = $1 AND status = 'active';
 
+-- name: GetUserByEfCustomerID :one
+-- Looks up the Kiro user that owns a given Etherfuse customer id. Used by the
+-- ramp webhook to attribute incoming order events to a merchant.
+SELECT u.id, u.privy_user_id, u.store_name_enc, u.cnpj_enc, u.cnpj_hash, u.email_enc, u.pix_key_enc, u.stellar_public_key, u.photo_enc, u.status, u.created_at, u.updated_at
+FROM users u
+JOIN kyc_profiles kp ON kp.user_id = u.id
+WHERE kp.ef_customer_id = $1 AND u.status = 'active';
+
 -- name: CreateUser :one
 INSERT INTO users (
     id, privy_user_id, store_name_enc, cnpj_enc, cnpj_hash, email_enc, pix_key_enc, stellar_public_key

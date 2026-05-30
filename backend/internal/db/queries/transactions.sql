@@ -1,9 +1,21 @@
--- name: InsertTransaction :one
+-- name: UpsertTransactionByEtherfuseOrderID :one
+-- Idempotent insert keyed on etherfuse_order_id so repeated webhook events for
+-- the same order collapse into a single row. created_at is preserved from the
+-- first event; downstream-mutable fields (amounts, status, stellar tx hash)
+-- get overwritten with the latest payload.
 INSERT INTO transactions (
-    id, user_id, direction, tesouro_amount, brl_amount, fee_brl_amount, stellar_tx_hash, etherfuse_order_id, status
+    id, user_id, direction, tesouro_amount, brl_amount, fee_brl_amount,
+    stellar_tx_hash, etherfuse_order_id, status
 ) VALUES (
     $1, $2, $3, $4, $5, $6, $7, $8, $9
 )
+ON CONFLICT (etherfuse_order_id) WHERE etherfuse_order_id IS NOT NULL
+DO UPDATE SET
+    tesouro_amount  = EXCLUDED.tesouro_amount,
+    brl_amount      = EXCLUDED.brl_amount,
+    fee_brl_amount  = EXCLUDED.fee_brl_amount,
+    stellar_tx_hash = EXCLUDED.stellar_tx_hash,
+    status          = EXCLUDED.status
 RETURNING id, user_id, direction, tesouro_amount, brl_amount, fee_brl_amount, stellar_tx_hash, etherfuse_order_id, status, created_at;
 
 -- name: ListTransactionsByUserID :many

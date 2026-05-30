@@ -54,6 +54,9 @@ func NewRouter(cfg *config.Config, pool *pgxpool.Pool, verifier *auth.Verifier, 
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
 
+	// Public, authenticated by HMAC over the body — not by Privy.
+	r.Post("/webhooks/etherfuse", s.etherfuseWebhook)
+
 	r.Route("/api/me", func(r chi.Router) {
 		r.Use(s.authMiddleware)
 		r.Get("/", s.getMe)
@@ -64,7 +67,6 @@ func NewRouter(cfg *config.Config, pool *pgxpool.Pool, verifier *auth.Verifier, 
 		r.Get("/consent", s.listMyConsents)
 		r.Post("/consent", s.postConsent)
 		r.Get("/transactions", s.listTransactions)
-		r.Post("/transactions", s.createTransaction)
 		r.Get("/transactions/fees/total", s.getTotalFees)
 		r.Get("/transactions/export", s.exportTransactionsCSV)
 		r.Get("/investment-summary", s.getInvestmentSummary)
