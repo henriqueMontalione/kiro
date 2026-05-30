@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, type ChangeEvent, type ComponentType, type ReactNode } from 'react';
-import { Building2, Camera, Check, Fingerprint, KeyRound, LogOut, Mail, Plus, Trash2, User } from 'lucide-react';
+import { useEffect, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
+import { Building2, Camera, Check, Fingerprint, KeyRound, LogOut, Mail, Plus, Trash2, User, type LucideIcon } from 'lucide-react';
 import { usePrivy, useMfaEnrollment } from '@privy-io/react-auth';
 import { Button } from '@/components/Button';
 import { Card, CardEyebrow } from '@/components/Card';
@@ -317,7 +317,7 @@ interface MfaMethodMeta {
   key: MfaMethod;
   label: string;
   sublabel: string;
-  icon: ComponentType<{ size?: number; strokeWidth?: number; color?: string }>;
+  icon: LucideIcon;
 }
 
 const MFA_METHOD_META: Record<MfaMethod, MfaMethodMeta> = {

@@ -79,7 +79,9 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     const newest = notifications[0].createdAt;
     setLastSeen(newest);
     getAccessToken()
-      .then((token) => token && markNotificationsRead(token, newest))
+      .then((token) => {
+        if (token) return markNotificationsRead(token, newest);
+      })
       .catch((err) => console.warn('[Notifications] mark read failed:', err));
   }, [notifications, getAccessToken]);
 
