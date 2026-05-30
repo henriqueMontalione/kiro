@@ -66,6 +66,7 @@ func NewRouter(cfg *config.Config, pool *pgxpool.Pool, verifier *auth.Verifier, 
 		r.Post("/transactions", s.createTransaction)
 		r.Get("/transactions/fees/total", s.getTotalFees)
 		r.Get("/transactions/export", s.exportTransactionsCSV)
+		r.Get("/investment-summary", s.getInvestmentSummary)
 		r.Get("/kyc-profile", s.getKycProfile)
 		r.Post("/kyc-profile", s.createKycProfile)
 		r.Post("/kyc-profile/docs", s.markKycDocsUploaded)

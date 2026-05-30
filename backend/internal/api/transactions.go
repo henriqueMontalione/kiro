@@ -118,6 +118,42 @@ func (s *Server) createTransaction(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, toTransactionResponse(tx))
 }
 
+// Returns the BRL cost basis (in centavos) needed to compute yield on the
+// client: total cash paid to acquire TESOURO (including deposit fees the
+// merchant absorbed via PIX) and total cash received from withdrawals. The
+// client combines these with the current TESOURO price + balance to derive
+// realized + unrealized profit.
+func (s *Server) getInvestmentSummary(w http.ResponseWriter, r *http.Request) {
+	identity := identityFrom(r.Context())
+	if identity == nil {
+		writeError(w, http.StatusUnauthorized, "Não autorizado")
+		return
+	}
+
+	user, err := s.queries.GetUserByPrivyID(r.Context(), identity.DID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		writeError(w, http.StatusNotFound, "Cadastro não encontrado")
+		return
+	}
+	if err != nil {
+		s.logger.Printf("getInvestmentSummary lookup user: %v", err)
+		writeError(w, http.StatusInternalServerError, "Erro interno")
+		return
+	}
+
+	agg, err := s.queries.GetInvestmentAggregates(r.Context(), user.ID)
+	if err != nil {
+		s.logger.Printf("getInvestmentSummary aggregate: %v", err)
+		writeError(w, http.StatusInternalServerError, "Erro interno")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]int64{
+		"total_paid_brl_centavos":     agg.TotalPaidBrl,
+		"total_received_brl_centavos": agg.TotalReceivedBrl,
+	})
+}
+
 func (s *Server) getTotalFees(w http.ResponseWriter, r *http.Request) {
 	identity := identityFrom(r.Context())
 	if identity == nil {
