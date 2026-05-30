@@ -7,16 +7,18 @@ import (
 )
 
 type User struct {
-	ID               uuid.UUID `json:"id"`
-	PrivyUserID      string    `json:"privy_user_id"`
-	StoreNameEnc     []byte    `json:"-"`
-	CnpjEnc          []byte    `json:"-"`
-	CnpjHash         []byte    `json:"-"`
-	EmailEnc         []byte    `json:"-"`
-	PixKeyEnc        []byte    `json:"-"`
-	StellarPublicKey string    `json:"stellar_public_key"`
-	PhotoEnc         []byte    `json:"-"`
-	Status           string    `json:"status"`
-	CreatedAt        time.Time `json:"created_at"`
-	UpdatedAt        time.Time `json:"updated_at"`
+	ID                     uuid.UUID `json:"id"`
+	PrivyUserID            string    `json:"privy_user_id"`
+	StoreNameEnc           []byte    `json:"-"`
+	CnpjEnc                []byte    `json:"-"`
+	CnpjHash               []byte    `json:"-"`
+	EmailEnc               []byte    `json:"-"`
+	PixKeyEnc              []byte    `json:"-"`
+	StellarPublicKey       string    `json:"stellar_public_key"`
+	PhotoEnc               []byte    `json:"-"`
+	EtherfuseCustomerID    *string   `json:"etherfuse_customer_id"`
+	EtherfuseBankAccountID *string   `json:"etherfuse_bank_account_id"`
+	Status                 string    `json:"status"`
+	CreatedAt              time.Time `json:"created_at"`
+	UpdatedAt              time.Time `json:"updated_at"`
 }

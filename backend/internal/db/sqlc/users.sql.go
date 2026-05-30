@@ -9,7 +9,7 @@ import (
 )
 
 const getUserByPrivyID = `-- name: GetUserByPrivyID :one
-SELECT id, privy_user_id, store_name_enc, cnpj_enc, cnpj_hash, email_enc, pix_key_enc, stellar_public_key, photo_enc, status, created_at, updated_at
+SELECT id, privy_user_id, store_name_enc, cnpj_enc, cnpj_hash, email_enc, pix_key_enc, stellar_public_key, photo_enc, etherfuse_customer_id, etherfuse_bank_account_id, status, created_at, updated_at
 FROM users
 WHERE privy_user_id = $1 AND status = 'active'
 `
@@ -27,6 +27,8 @@ func (q *Queries) GetUserByPrivyID(ctx context.Context, privyUserID string) (Use
 		&u.PixKeyEnc,
 		&u.StellarPublicKey,
 		&u.PhotoEnc,
+		&u.EtherfuseCustomerID,
+		&u.EtherfuseBankAccountID,
 		&u.Status,
 		&u.CreatedAt,
 		&u.UpdatedAt,
@@ -35,10 +37,9 @@ func (q *Queries) GetUserByPrivyID(ctx context.Context, privyUserID string) (Use
 }
 
 const getUserByEfCustomerID = `-- name: GetUserByEfCustomerID :one
-SELECT u.id, u.privy_user_id, u.store_name_enc, u.cnpj_enc, u.cnpj_hash, u.email_enc, u.pix_key_enc, u.stellar_public_key, u.photo_enc, u.status, u.created_at, u.updated_at
-FROM users u
-JOIN kyc_profiles kp ON kp.user_id = u.id
-WHERE kp.ef_customer_id = $1 AND u.status = 'active'
+SELECT id, privy_user_id, store_name_enc, cnpj_enc, cnpj_hash, email_enc, pix_key_enc, stellar_public_key, photo_enc, etherfuse_customer_id, etherfuse_bank_account_id, status, created_at, updated_at
+FROM users
+WHERE etherfuse_customer_id = $1 AND status = 'active'
 `
 
 func (q *Queries) GetUserByEfCustomerID(ctx context.Context, efCustomerID string) (User, error) {
@@ -54,6 +55,8 @@ func (q *Queries) GetUserByEfCustomerID(ctx context.Context, efCustomerID string
 		&u.PixKeyEnc,
 		&u.StellarPublicKey,
 		&u.PhotoEnc,
+		&u.EtherfuseCustomerID,
+		&u.EtherfuseBankAccountID,
 		&u.Status,
 		&u.CreatedAt,
 		&u.UpdatedAt,
@@ -67,7 +70,7 @@ INSERT INTO users (
 ) VALUES (
     $1, $2, $3, $4, $5, $6, $7, $8
 )
-RETURNING id, privy_user_id, store_name_enc, cnpj_enc, cnpj_hash, email_enc, pix_key_enc, stellar_public_key, photo_enc, status, created_at, updated_at
+RETURNING id, privy_user_id, store_name_enc, cnpj_enc, cnpj_hash, email_enc, pix_key_enc, stellar_public_key, photo_enc, etherfuse_customer_id, etherfuse_bank_account_id, status, created_at, updated_at
 `
 
 type CreateUserParams struct {
@@ -103,6 +106,8 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&u.PixKeyEnc,
 		&u.StellarPublicKey,
 		&u.PhotoEnc,
+		&u.EtherfuseCustomerID,
+		&u.EtherfuseBankAccountID,
 		&u.Status,
 		&u.CreatedAt,
 		&u.UpdatedAt,
@@ -113,21 +118,31 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 const updateUser = `-- name: UpdateUser :one
 UPDATE users
 SET
-    store_name_enc = COALESCE($2, store_name_enc),
-    pix_key_enc    = COALESCE($3, pix_key_enc),
-    updated_at     = NOW()
+    store_name_enc            = COALESCE($2, store_name_enc),
+    pix_key_enc               = COALESCE($3, pix_key_enc),
+    etherfuse_customer_id     = COALESCE($4, etherfuse_customer_id),
+    etherfuse_bank_account_id = COALESCE($5, etherfuse_bank_account_id),
+    updated_at                = NOW()
 WHERE privy_user_id = $1 AND status = 'active'
-RETURNING id, privy_user_id, store_name_enc, cnpj_enc, cnpj_hash, email_enc, pix_key_enc, stellar_public_key, photo_enc, status, created_at, updated_at
+RETURNING id, privy_user_id, store_name_enc, cnpj_enc, cnpj_hash, email_enc, pix_key_enc, stellar_public_key, photo_enc, etherfuse_customer_id, etherfuse_bank_account_id, status, created_at, updated_at
 `
 
 type UpdateUserParams struct {
-	PrivyUserID  string `json:"privy_user_id"`
-	StoreNameEnc []byte `json:"store_name_enc"`
-	PixKeyEnc    []byte `json:"pix_key_enc"`
+	PrivyUserID            string  `json:"privy_user_id"`
+	StoreNameEnc           []byte  `json:"store_name_enc"`
+	PixKeyEnc              []byte  `json:"pix_key_enc"`
+	EtherfuseCustomerID    *string `json:"etherfuse_customer_id"`
+	EtherfuseBankAccountID *string `json:"etherfuse_bank_account_id"`
 }
 
 func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (User, error) {
-	row := q.db.QueryRow(ctx, updateUser, arg.PrivyUserID, arg.StoreNameEnc, arg.PixKeyEnc)
+	row := q.db.QueryRow(ctx, updateUser,
+		arg.PrivyUserID,
+		arg.StoreNameEnc,
+		arg.PixKeyEnc,
+		arg.EtherfuseCustomerID,
+		arg.EtherfuseBankAccountID,
+	)
 	var u User
 	err := row.Scan(
 		&u.ID,
@@ -139,6 +154,8 @@ func (q *Queries) UpdateUser(ctx context.Context, arg UpdateUserParams) (User, e
 		&u.PixKeyEnc,
 		&u.StellarPublicKey,
 		&u.PhotoEnc,
+		&u.EtherfuseCustomerID,
+		&u.EtherfuseBankAccountID,
 		&u.Status,
 		&u.CreatedAt,
 		&u.UpdatedAt,
@@ -150,7 +167,7 @@ const updateUserPhoto = `-- name: UpdateUserPhoto :one
 UPDATE users
 SET photo_enc = $2, updated_at = NOW()
 WHERE privy_user_id = $1 AND status = 'active'
-RETURNING id, privy_user_id, store_name_enc, cnpj_enc, cnpj_hash, email_enc, pix_key_enc, stellar_public_key, photo_enc, status, created_at, updated_at
+RETURNING id, privy_user_id, store_name_enc, cnpj_enc, cnpj_hash, email_enc, pix_key_enc, stellar_public_key, photo_enc, etherfuse_customer_id, etherfuse_bank_account_id, status, created_at, updated_at
 `
 
 type UpdateUserPhotoParams struct {
@@ -171,6 +188,8 @@ func (q *Queries) UpdateUserPhoto(ctx context.Context, arg UpdateUserPhotoParams
 		&u.PixKeyEnc,
 		&u.StellarPublicKey,
 		&u.PhotoEnc,
+		&u.EtherfuseCustomerID,
+		&u.EtherfuseBankAccountID,
 		&u.Status,
 		&u.CreatedAt,
 		&u.UpdatedAt,

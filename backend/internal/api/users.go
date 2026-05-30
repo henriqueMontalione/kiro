@@ -28,16 +28,18 @@ var (
 var requiredPolicies = []string{"terms_of_use", "privacy_policy"}
 
 type userResponse struct {
-	ID               uuid.UUID `json:"id"`
-	StoreName        string    `json:"store_name"`
-	Cnpj             string    `json:"cnpj"`
-	Email            string    `json:"email"`
-	PixKey           string    `json:"pix_key"`
-	StellarPublicKey string    `json:"stellar_public_key"`
-	PhotoDataURL     *string   `json:"photo_data_url"`
-	Status           string    `json:"status"`
-	CreatedAt        string    `json:"created_at"`
-	UpdatedAt        string    `json:"updated_at"`
+	ID                     uuid.UUID `json:"id"`
+	StoreName              string    `json:"store_name"`
+	Cnpj                   string    `json:"cnpj"`
+	Email                  string    `json:"email"`
+	PixKey                 string    `json:"pix_key"`
+	StellarPublicKey       string    `json:"stellar_public_key"`
+	PhotoDataURL           *string   `json:"photo_data_url"`
+	EtherfuseCustomerID    *string   `json:"etherfuse_customer_id"`
+	EtherfuseBankAccountID *string   `json:"etherfuse_bank_account_id"`
+	Status                 string    `json:"status"`
+	CreatedAt              string    `json:"created_at"`
+	UpdatedAt              string    `json:"updated_at"`
 }
 
 func (s *Server) toResponse(u sqlc.User) (userResponse, error) {
@@ -68,16 +70,18 @@ func (s *Server) toResponse(u sqlc.User) (userResponse, error) {
 	}
 
 	return userResponse{
-		ID:               u.ID,
-		StoreName:        storeName,
-		Cnpj:             cnpj,
-		Email:            email,
-		PixKey:           pixKey,
-		StellarPublicKey: u.StellarPublicKey,
-		PhotoDataURL:     photoDataURL,
-		Status:           u.Status,
-		CreatedAt:        u.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
-		UpdatedAt:        u.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		ID:                     u.ID,
+		StoreName:              storeName,
+		Cnpj:                   cnpj,
+		Email:                  email,
+		PixKey:                 pixKey,
+		StellarPublicKey:       u.StellarPublicKey,
+		PhotoDataURL:           photoDataURL,
+		EtherfuseCustomerID:    u.EtherfuseCustomerID,
+		EtherfuseBankAccountID: u.EtherfuseBankAccountID,
+		Status:                 u.Status,
+		CreatedAt:              u.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		UpdatedAt:              u.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
 	}, nil
 }
 
@@ -249,9 +253,13 @@ func (s *Server) createMe(w http.ResponseWriter, r *http.Request) {
 }
 
 type updateMeBody struct {
-	StoreName *string `json:"store_name,omitempty"`
-	PixKey    *string `json:"pix_key,omitempty"`
+	StoreName              *string `json:"store_name,omitempty"`
+	PixKey                 *string `json:"pix_key,omitempty"`
+	EtherfuseCustomerID    *string `json:"etherfuse_customer_id,omitempty"`
+	EtherfuseBankAccountID *string `json:"etherfuse_bank_account_id,omitempty"`
 }
+
+var etherfuseIDRegex = regexp.MustCompile(`^[A-Za-z0-9_-]{1,64}$`)
 
 func (s *Server) updateMe(w http.ResponseWriter, r *http.Request) {
 	identity := identityFrom(r.Context())
@@ -294,6 +302,22 @@ func (s *Server) updateMe(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		params.PixKeyEnc = enc
+	}
+	if body.EtherfuseCustomerID != nil {
+		trimmed := strings.TrimSpace(*body.EtherfuseCustomerID)
+		if !etherfuseIDRegex.MatchString(trimmed) {
+			writeError(w, http.StatusBadRequest, "ID de cliente inválido")
+			return
+		}
+		params.EtherfuseCustomerID = &trimmed
+	}
+	if body.EtherfuseBankAccountID != nil {
+		trimmed := strings.TrimSpace(*body.EtherfuseBankAccountID)
+		if !etherfuseIDRegex.MatchString(trimmed) {
+			writeError(w, http.StatusBadRequest, "ID de conta inválido")
+			return
+		}
+		params.EtherfuseBankAccountID = &trimmed
 	}
 
 	user, err := s.queries.UpdateUser(r.Context(), params)
