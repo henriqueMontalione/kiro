@@ -12,11 +12,10 @@ import {
   getMe,
   createMe,
   updateMe,
+  updateMyPhoto,
   type UserProfile,
   type CreateMeBody,
 } from '@/lib/api/me';
-
-const PHOTO_KEY = 'kiro_profile_photo';
 
 /**
  * Status state machine for the lojista profile lifecycle:
@@ -42,10 +41,12 @@ interface UserProfileState {
   role: string;
   /** Two-letter initials derived from name; "?" when unavailable. */
   initials: string;
-  /** Data URL or null. Local-only — photo upload to backend not implemented yet. */
+  /** Data URL or null. Source of truth is the backend (encrypted PII column);
+   *  never read from or written to browser storage. */
   photoUrl: string | null;
 
-  setPhotoUrl: (url: string | null) => void;
+  /** Persists the new photo (or null to remove) on the backend. */
+  setPhotoUrl: (url: string | null) => Promise<void>;
   /** PATCH /api/me with a new store_name. Updates the local profile on success. */
   setName: (name: string) => Promise<void>;
   /** Submits the cadastro form on first login. Promotes status → 'ready' on success. */
@@ -70,29 +71,22 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<ProfileStatus>('idle');
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [photoUrl, setPhotoUrlState] = useState<string | null>(
-    () => localStorage.getItem(PHOTO_KEY),
-  );
 
   const fetchProfile = useCallback(async () => {
     setStatus('loading');
     setErrorMessage(null);
-    console.log('[UserProfile] fetchProfile started');
     try {
       const token = await getAccessToken();
       if (!token) {
-        console.warn('[UserProfile] fetchProfile: no access token');
         setStatus('error');
         setErrorMessage('Sessão expirada. Faça login novamente.');
         return;
       }
       const p = await getMe(token);
       if (p === null) {
-        console.log('[UserProfile] backend returned 404 → needs_onboarding');
         setProfile(null);
         setStatus('needs_onboarding');
       } else {
-        console.log('[UserProfile] profile loaded successfully');
         setProfile(p);
         setStatus('ready');
       }
@@ -111,8 +105,6 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
       setStatus('idle');
       setProfile(null);
       setErrorMessage(null);
-      setPhotoUrlState(null);
-      localStorage.removeItem(PHOTO_KEY);
       return;
     }
     fetchProfile();
@@ -132,11 +124,15 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
     [publicKey, getAccessToken],
   );
 
-  const setPhotoUrl = useCallback((url: string | null) => {
-    setPhotoUrlState(url);
-    if (url) localStorage.setItem(PHOTO_KEY, url);
-    else localStorage.removeItem(PHOTO_KEY);
-  }, []);
+  const setPhotoUrl = useCallback(
+    async (url: string | null) => {
+      const token = await getAccessToken();
+      if (!token) throw new Error('Sessão expirada. Faça login novamente.');
+      const updated = await updateMyPhoto(token, url);
+      setProfile(updated);
+    },
+    [getAccessToken],
+  );
 
   const setName = useCallback(
     async (next: string) => {
@@ -155,6 +151,7 @@ export function UserProfileProvider({ children }: { children: ReactNode }) {
   const name = profile?.store_name ?? '';
   const email = profile?.email ?? user?.email?.address ?? '';
   const initials = profile ? deriveInitials(profile.store_name) : '?';
+  const photoUrl = profile?.photo_data_url ?? null;
 
   return (
     <UserProfileContext.Provider

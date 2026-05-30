@@ -7,27 +7,10 @@ import { useWallet } from '@/context/WalletContext';
 import { useEtherfuseKyc } from '@/context/EtherfuseKycContext';
 import { markKycDocsUploaded } from '@/lib/api/kyc';
 import { uploadKycDocuments, sandboxApprove } from '@/lib/anchors/etherfuse/client';
+import { compressImage } from '@/lib/image';
 
 const BANK_ACCOUNT_KEY = 'kiro_ef_bank_account_id';
 const SANDBOX_ENABLED = import.meta.env.VITE_ETHERFUSE_SANDBOX === 'true';
-
-function compressImage(file: File, maxDim = 1400, quality = 0.82): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    const objectUrl = URL.createObjectURL(file);
-    img.onload = () => {
-      URL.revokeObjectURL(objectUrl);
-      const scale = Math.min(1, maxDim / Math.max(img.naturalWidth, img.naturalHeight));
-      const canvas = document.createElement('canvas');
-      canvas.width = Math.round(img.naturalWidth * scale);
-      canvas.height = Math.round(img.naturalHeight * scale);
-      canvas.getContext('2d')!.drawImage(img, 0, 0, canvas.width, canvas.height);
-      resolve(canvas.toDataURL('image/jpeg', quality));
-    };
-    img.onerror = reject;
-    img.src = objectUrl;
-  });
-}
 
 interface SlotProps {
   label: string;

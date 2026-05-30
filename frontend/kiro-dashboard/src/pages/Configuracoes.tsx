@@ -6,14 +6,15 @@ import { Card, CardEyebrow } from '@/components/Card';
 import { useUserProfile } from '@/context/UserProfileContext';
 import { useWallet } from '@/context/WalletContext';
 import { formatCnpj } from '@/lib/format';
+import { compressImage } from '@/lib/image';
 import { truncateKey } from '@/lib/stellar';
 import { StatusTag } from '@/components/StatusTag';
 
-const MAX_PHOTO_BYTES = 1 * 1024 * 1024;
+const MAX_RAW_PHOTO_BYTES = 20 * 1024 * 1024;
 
 /**
  * Settings page — edit display name and avatar; view registered email.
- * Persistence lives in UserProfileContext (localStorage-backed).
+ * Photo and name persist through the backend (encrypted at rest).
  */
 export default function Configuracoes() {
   const profile = useUserProfile();
@@ -24,6 +25,7 @@ export default function Configuracoes() {
   const [photoError, setPhotoError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [loggingOut, setLoggingOut] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const hydratedRef = useRef(false);
@@ -55,21 +57,27 @@ export default function Configuracoes() {
   const dirty = trimmed !== profile.name || photoPreview !== profile.photoUrl;
   const canSave = trimmed.length > 0 && dirty && !saving;
 
-  function handleFileChange(e: ChangeEvent<HTMLInputElement>) {
+  async function handleFileChange(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > MAX_PHOTO_BYTES) {
-      setPhotoError('Imagem muito grande. Use uma foto de até 1 MB.');
-      e.target.value = '';
+    e.target.value = '';
+    if (!file.type.startsWith('image/')) {
+      setPhotoError('Selecione uma imagem.');
       return;
     }
-    const reader = new FileReader();
-    reader.onload = () => {
-      setPhotoPreview(typeof reader.result === 'string' ? reader.result : null);
+    if (file.size > MAX_RAW_PHOTO_BYTES) {
+      setPhotoError('Imagem muito grande. Tente outra.');
+      return;
+    }
+    try {
+      const dataUrl = await compressImage(file, 512, 0.85);
+      setPhotoPreview(dataUrl);
       setPhotoError(null);
       setSaved(false);
-    };
-    reader.readAsDataURL(file);
+      setSaveError(null);
+    } catch {
+      setPhotoError('Não consegui processar essa imagem.');
+    }
   }
 
   function handleRemovePhoto() {
@@ -79,17 +87,22 @@ export default function Configuracoes() {
     if (fileInputRef.current) fileInputRef.current.value = '';
   }
 
-  function handleSave() {
+  async function handleSave() {
     if (!canSave) return;
     setSaving(true);
-    // Tiny delay so the disabled state is visible — no backend wired yet.
-    setTimeout(() => {
-      profile.setName(trimmed);
-      profile.setPhotoUrl(photoPreview);
-      setSaving(false);
+    setSaveError(null);
+    const nameChanged = trimmed !== profile.name;
+    const photoChanged = photoPreview !== profile.photoUrl;
+    try {
+      if (nameChanged) await profile.setName(trimmed);
+      if (photoChanged) await profile.setPhotoUrl(photoPreview);
       setSaved(true);
       setTimeout(() => setSaved(false), 2400);
-    }, 350);
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Não consegui salvar suas alterações.');
+    } finally {
+      setSaving(false);
+    }
   }
 
   function handleCancel() {
@@ -97,6 +110,7 @@ export default function Configuracoes() {
     setPhotoPreview(profile.photoUrl);
     setPhotoError(null);
     setSaved(false);
+    setSaveError(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
   }
 
@@ -238,13 +252,18 @@ export default function Configuracoes() {
         >
           {/* Fixed-height slot so the buttons don't jump when the message appears. */}
           <div className="flex items-center mb-3" style={{ minHeight: 18 }}>
-            {saved && (
+            {saved && !saveError && (
               <span
                 className="inline-flex items-center gap-[6px] text-[13px]"
                 style={{ color: 'var(--kiro-green)' }}
               >
                 <Check size={14} strokeWidth={2} />
                 Alterações salvas
+              </span>
+            )}
+            {saveError && (
+              <span className="text-[13px]" style={{ color: '#FF4D6D' }}>
+                {saveError}
               </span>
             )}
           </div>

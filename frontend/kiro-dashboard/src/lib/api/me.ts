@@ -11,6 +11,10 @@ export interface UserProfile {
   email: string;
   pix_key: string;
   stellar_public_key: string;
+  /** Full data URL (e.g. "data:image/jpeg;base64,…") or null when the merchant
+   *  hasn't uploaded a profile photo / store logo yet. Decrypted server-side
+   *  on every GET /api/me. */
+  photo_data_url: string | null;
   status: string;
   created_at: string;
   updated_at: string;
@@ -91,6 +95,26 @@ export async function updateMe(token: string, body: UpdateMeBody): Promise<UserP
   const { status, data } = await request<UserProfile>('/api/me', token, {
     method: 'PATCH',
     body: JSON.stringify(body),
+  });
+  if (status >= 400) {
+    const msg = (data as { error?: string } | null)?.error ?? `HTTP ${status}`;
+    throw new Error(msg);
+  }
+  return data as UserProfile;
+}
+
+/**
+ * Uploads or removes the user's profile photo. Pass a data URL to set; pass
+ * `null` to clear. Returns the refreshed profile so the caller can update
+ * its local state in one round trip.
+ */
+export async function updateMyPhoto(
+  token: string,
+  photoDataUrl: string | null,
+): Promise<UserProfile> {
+  const { status, data } = await request<UserProfile>('/api/me/photo', token, {
+    method: 'PUT',
+    body: JSON.stringify({ photo_data_url: photoDataUrl }),
   });
   if (status >= 400) {
     const msg = (data as { error?: string } | null)?.error ?? `HTTP ${status}`;
