@@ -89,6 +89,22 @@ export async function downloadTransactionsCSV(token: string): Promise<void> {
   URL.revokeObjectURL(url);
 }
 
+export interface InvestmentSummary {
+  /** Total BRL the merchant spent buying TESOURO (includes deposit fees). */
+  total_paid_brl_centavos: number;
+  /** Total BRL the merchant received from withdrawals (net of fees). */
+  total_received_brl_centavos: number;
+}
+
+export async function getInvestmentSummary(token: string): Promise<InvestmentSummary> {
+  const { status, data } = await request<InvestmentSummary>('/api/me/investment-summary', token);
+  if (status >= 400) {
+    const msg = (data as { error?: string } | null)?.error ?? `HTTP ${status}`;
+    throw new Error(msg);
+  }
+  return data as InvestmentSummary;
+}
+
 export async function getTotalFees(token: string): Promise<number> {
   const { status, data } = await request<{ total_fee_brl_amount: number }>(
     '/api/me/transactions/fees/total',

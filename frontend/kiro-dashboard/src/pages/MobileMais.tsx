@@ -12,6 +12,7 @@ import {
 import { usePrivy } from '@privy-io/react-auth';
 import { Card } from '@/components/Card';
 import { FeeInfoModal } from '@/components/FeeInfoModal';
+import { YieldCard } from '@/components/YieldCard';
 import { useWallet } from '@/context/WalletContext';
 import { useTransactions } from '@/context/TransactionsContext';
 import { getTotalFees } from '@/lib/api/transactions';
@@ -122,6 +123,8 @@ export default function MobileMais() {
           </div>
         </Card>
       </div>
+
+      <YieldCard />
 
       <Card>
         <div className="flex items-center justify-between gap-2 mb-1">

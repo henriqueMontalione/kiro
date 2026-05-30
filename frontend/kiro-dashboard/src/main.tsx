@@ -8,6 +8,7 @@ import { QuoteProvider } from './context/QuoteContext';
 import { NotificationsProvider } from './context/NotificationsContext';
 import { UserProfileProvider } from './context/UserProfileContext';
 import { TransactionsProvider } from './context/TransactionsContext';
+import { InvestmentProvider } from './context/InvestmentContext';
 import './index.css';
 
 const PRIVY_APP_ID = import.meta.env.VITE_PRIVY_APP_ID as string;
@@ -39,9 +40,11 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
             <TransactionsProvider>
               <DashboardProvider>
                 <QuoteProvider>
-                  <NotificationsProvider>
-                    <App />
-                  </NotificationsProvider>
+                  <InvestmentProvider>
+                    <NotificationsProvider>
+                      <App />
+                    </NotificationsProvider>
+                  </InvestmentProvider>
                 </QuoteProvider>
               </DashboardProvider>
             </TransactionsProvider>
