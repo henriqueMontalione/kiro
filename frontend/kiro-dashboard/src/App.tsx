@@ -29,6 +29,7 @@ import MobileMais from '@/pages/MobileMais';
  * can open it via the `onReceive` prop.
  */
 export default function App() {
+  const { publicKey } = useWallet();
   const [pixOpen, setPixOpen] = useState(false);
   const openPix = () => setPixOpen(true);
   const closePix = () => setPixOpen(false);
@@ -36,6 +37,12 @@ export default function App() {
   const [sacarOpen, setSacarOpen] = useState(false);
   const openSacar = () => setSacarOpen(true);
   const closeSacar = () => setSacarOpen(false);
+
+  // Tying every form-holding modal's React identity to the current wallet
+  // forces a full remount when the merchant logs out and a different account
+  // logs in — without this, the modals keep their useState from the previous
+  // user (LGPD violation: PII leaks between accounts on the same browser).
+  const sessionKey = publicKey ?? 'anon';
 
   return (
     <div className="flex min-h-screen">
@@ -81,10 +88,10 @@ export default function App() {
         <MobileBottomNav />
       </div>
 
-      <ReceberPixModal open={pixOpen} onClose={closePix} />
-      <SacarPixModal open={sacarOpen} onClose={closeSacar} />
+      <ReceberPixModal key={`receber-${sessionKey}`} open={pixOpen} onClose={closePix} />
+      <SacarPixModal key={`sacar-${sessionKey}`} open={sacarOpen} onClose={closeSacar} />
       <WalletSignModal />
-      <CompleteOnboardingModal />
+      <CompleteOnboardingModal key={`onboarding-${sessionKey}`} />
     </div>
   );
 }
