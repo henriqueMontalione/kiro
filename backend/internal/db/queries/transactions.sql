@@ -37,8 +37,13 @@ WHERE user_id = $1
 ORDER BY created_at DESC;
 
 -- name: GetInvestmentAggregates :one
+-- Cost basis of the merchant's TESOURO position. `brl_amount` for on-ramp is
+-- the net BRL that actually became TESOURO (after Etherfuse's fee). The fee
+-- itself is shown to the merchant in a separate "Taxas pagas" card and must
+-- not be double-counted as a yield drag — otherwise rendimento shows a
+-- spurious loss right after every deposit.
 SELECT
-    COALESCE(SUM(CASE WHEN direction = 'in'  THEN brl_amount + fee_brl_amount ELSE 0 END), 0)::BIGINT AS total_paid_brl,
+    COALESCE(SUM(CASE WHEN direction = 'in'  THEN brl_amount ELSE 0 END), 0)::BIGINT AS total_paid_brl,
     COALESCE(SUM(CASE WHEN direction = 'out' THEN brl_amount ELSE 0 END), 0)::BIGINT AS total_received_brl
 FROM transactions
 WHERE user_id = $1 AND status = 'completed';

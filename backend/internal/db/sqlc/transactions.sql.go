@@ -118,7 +118,7 @@ ORDER BY created_at DESC
 
 const getInvestmentAggregates = `-- name: GetInvestmentAggregates :one
 SELECT
-    COALESCE(SUM(CASE WHEN direction = 'in'  THEN brl_amount + fee_brl_amount ELSE 0 END), 0)::BIGINT AS total_paid_brl,
+    COALESCE(SUM(CASE WHEN direction = 'in'  THEN brl_amount ELSE 0 END), 0)::BIGINT AS total_paid_brl,
     COALESCE(SUM(CASE WHEN direction = 'out' THEN brl_amount ELSE 0 END), 0)::BIGINT AS total_received_brl
 FROM transactions
 WHERE user_id = $1 AND status = 'completed'
