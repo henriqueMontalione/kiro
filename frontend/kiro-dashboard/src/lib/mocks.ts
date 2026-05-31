@@ -90,16 +90,11 @@ export const PAYMENT_LINKS: PaymentLink[] = [
   { name: 'Mensalidade', amount: 'R$ 89,00', uses: 8, url: 'kiro.pay/q/C3vDe' },
 ];
 
-/** Sidebar nav. The first three have built screens; the rest fall back to placeholders. */
+/** Sidebar nav. */
 export const NAV_ITEMS: NavItem[] = [
   { id: 'resumo', label: 'Resumo', icon: 'House', to: '/resumo' },
   { id: 'transacoes', label: 'Transações', icon: 'ArrowLeftRight', to: '/transacoes' },
-  { id: 'recebimentos', label: 'Recebimentos', icon: 'QrCode', to: '/recebimentos' },
-  { id: 'extrato', label: 'Extrato', icon: 'ReceiptText', to: '/extrato' },
-  // { id: 'links', label: 'Links de Pagamento', icon: 'Link2', to: '/links' },
-  // { id: 'clientes', label: 'Clientes', icon: 'Users', to: '/clientes' },
-  // { id: 'relatorios', label: 'Relatórios', icon: 'BarChart3', to: '/relatorios' },
-  // { id: 'integracoes', label: 'Integrações', icon: 'Puzzle', to: '/integracoes' },
+  { id: 'analise', label: 'Análise', icon: 'BarChart3', to: '/mais' },
   { id: 'config', label: 'Configurações', icon: 'Settings', to: '/config' },
 ];
 
@@ -107,7 +102,6 @@ export const NAV_ITEMS: NavItem[] = [
 export const TOP_TABS: { id: NavItem['id']; label: string; to: string }[] = [
   { id: 'resumo', label: 'Resumo', to: '/resumo' },
   { id: 'transacoes', label: 'Transações', to: '/transacoes' },
-  { id: 'recebimentos', label: 'Recebimentos', to: '/recebimentos' },
-  { id: 'extrato', label: 'Extrato', to: '/extrato' },
+  { id: 'analise', label: 'Análise', to: '/mais' },
   { id: 'config', label: 'Configurações', to: '/config' },
 ];

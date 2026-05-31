@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { BalanceCard } from '@/components/cards/BalanceCard';
-import { YieldCard } from '@/components/cards/YieldCard';
+import { YieldCard } from '@/components/YieldCard';
 import { TransactionsCard } from '@/components/cards/TransactionsCard';
 import { RecebimentosCard } from '@/components/cards/RecebimentosCard';
 import MobileInicio from '@/pages/MobileInicio';

@@ -3,7 +3,8 @@ import { ChevronRight, ShoppingBag, ArrowUpRight } from 'lucide-react';
 import { Card } from '../Card';
 import { useWallet } from '@/context/WalletContext';
 import { useDashboard } from '@/context/DashboardContext';
-import { fetchTesouroPayments, type WalletPayment } from '@/lib/stellar';
+import { useTransactions } from '@/context/TransactionsContext';
+import type { WalletPayment } from '@/lib/stellar';
 
 interface MobileActivityCardProps {
   onSeeAll: () => void;
@@ -12,27 +13,18 @@ interface MobileActivityCardProps {
 }
 
 /**
- * Condensed "Atividade Recente" list for the mobile home. Pulls the most recent
- * TESOURO movements from Horizon and labels them as "Saque via PIX" (outgoing)
- * or "Pagamento via PIX" (incoming).
+ * Condensed "Atividade Recente" list for the mobile home. Reads the most recent
+ * TESOURO movements from the backend transactions log.
  */
 export function MobileActivityCard({ onSeeAll, limit = 3 }: MobileActivityCardProps) {
-  const { publicKey, balance, isConnected } = useWallet();
+  const { isConnected } = useWallet();
   const { valuesHidden, refreshTick } = useDashboard();
-  // `null` = pending fetch. `[]` = fetched but empty.
-  const [payments, setPayments] = useState<WalletPayment[] | null>(null);
+  const { payments: allPayments, refresh } = useTransactions();
+  const payments: WalletPayment[] | null = isConnected ? allPayments.slice(0, limit) : null;
 
   useEffect(() => {
-    if (!publicKey) {
-      setPayments(null);
-      return;
-    }
-    let cancelled = false;
-    fetchTesouroPayments(publicKey, limit).then((p) => {
-      if (!cancelled) setPayments(p);
-    });
-    return () => { cancelled = true; };
-  }, [publicKey, balance, limit, refreshTick]);
+    if (refreshTick > 0) refresh();
+  }, [refreshTick, refresh]);
 
   return (
     <Card>
@@ -52,7 +44,7 @@ export function MobileActivityCard({ onSeeAll, limit = 3 }: MobileActivityCardPr
 
       {!isConnected && (
         <div className="text-center text-[var(--fg-3)] text-[13px]" style={{ padding: '16px 0' }}>
-          Conecte sua carteira para ver suas movimentações.
+          Entre na sua conta para ver suas movimentações.
         </div>
       )}
       {isConnected && payments === null && <MobileSkeleton count={limit} />}
@@ -107,6 +99,14 @@ function MobileSkeleton({ count }: { count: number }) {
 }
 
 function ActivityRow({ payment, valuesHidden }: { payment: WalletPayment; valuesHidden: boolean }) {
+  const [pressing, setPressing] = useState(false);
+  const revealed = !valuesHidden || pressing;
+
+  const startPress = () => {
+    if (valuesHidden) setPressing(true);
+  };
+  const endPress = () => setPressing(false);
+
   const isOut = payment.direction === 'out';
   const Icon = isOut ? ArrowUpRight : ShoppingBag;
   const label = isOut ? 'Saque via PIX' : 'Pagamento recebido';
@@ -118,7 +118,24 @@ function ActivityRow({ payment, valuesHidden }: { payment: WalletPayment; values
   return (
     <div
       className="flex items-center gap-3 rounded-[12px]"
-      style={{ padding: '10px 4px', minHeight: 56 }}
+      style={{
+        padding: '10px 4px',
+        minHeight: 56,
+        cursor: valuesHidden ? 'pointer' : 'default',
+        WebkitUserSelect: 'none',
+        userSelect: 'none',
+        WebkitTouchCallout: 'none',
+        touchAction: 'manipulation',
+      }}
+      onMouseDown={startPress}
+      onMouseUp={endPress}
+      onMouseLeave={endPress}
+      onTouchStart={startPress}
+      onTouchEnd={endPress}
+      onTouchCancel={endPress}
+      onContextMenu={(e) => {
+        if (valuesHidden) e.preventDefault();
+      }}
     >
       <div
         className="flex items-center justify-center rounded-[10px] flex-shrink-0"
@@ -134,9 +151,8 @@ function ActivityRow({ payment, valuesHidden }: { payment: WalletPayment; values
         className="k-money text-[14px] font-medium whitespace-nowrap"
         style={{
           color: amountColor,
-          filter: valuesHidden ? 'blur(6px)' : 'none',
+          filter: revealed ? 'none' : 'blur(6px)',
           transition: 'filter 200ms ease-out',
-          userSelect: valuesHidden ? 'none' : 'auto',
         }}
       >
         {isOut ? '− ' : '+ '}

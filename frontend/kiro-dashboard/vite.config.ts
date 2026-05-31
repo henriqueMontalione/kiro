@@ -60,6 +60,98 @@ function sendJson(res: ServerResponse, data: unknown, status = 200) {
   res.end(JSON.stringify(data));
 }
 
+// Identity payload for the sandbox bypass /kyc submission. Matches the
+// documented schema for POST /ramp/customer/{id}/kyc.
+const SANDBOX_KYC_IDENTITY = {
+  name: { givenName: 'Sandbox', familyName: 'Tester' },
+  dateOfBirth: '1990-01-15',
+  address: {
+    street: 'Av. Paulista 1000',
+    city: 'Sao Paulo',
+    region: 'SP',
+    postalCode: '01310100',
+    country: 'BR',
+  },
+  idNumbers: [{ value: '00000000191', type: 'CPF' }],
+};
+
+
+/**
+ * Stellar account-activation and transaction-submit proxy.
+ * Mirrors the behaviour of netlify/functions/stellar.mts for local dev:
+ *   - POST /api/stellar-activate  testnet → friendbot; mainnet → not needed in dev
+ *   - POST /api/stellar-submit    testnet → direct Horizon submit
+ */
+function stellarApi(stellarEnv: { network: string; horizonUrl: string; friendbotUrl: string }): Plugin {
+  console.log('[stellar-api] plugin instantiated. network:', stellarEnv.network);
+  return {
+    name: 'kiro-stellar-api',
+    configureServer(server) {
+      console.log('[stellar-api] configureServer called — registering middleware');
+      server.middlewares.use(async (req, res, next) => {
+        const url = req.url ?? '';
+        if (!url.startsWith('/api/stellar-')) return next();
+        console.log('[stellar-api]', req.method, url);
+
+        const parsed = new URL(url, 'http://localhost');
+        const method = req.method ?? 'GET';
+
+        try {
+          // Dev: verify Bearer token is present (signature not checked locally).
+          const auth = (req.headers['authorization'] as string | undefined) ?? '';
+          if (!auth.startsWith('Bearer ')) {
+            console.log('[stellar-api] missing bearer token → 401');
+            return sendJson(res, { error: 'Não autorizado' }, 401);
+          }
+
+          if (parsed.pathname === '/api/stellar-activate' && method === 'POST') {
+            const { publicKey } = JSON.parse(await readBody(req)) as { publicKey: string };
+
+            // Check if account already exists on Horizon.
+            try {
+              const chk = await fetch(`${stellarEnv.horizonUrl}/accounts/${encodeURIComponent(publicKey)}`);
+              if (chk.ok) return sendJson(res, { funded: false, existed: true });
+            } catch { /* proceed to create */ }
+
+            // Testnet: delegate to friendbot.
+            const fbRes = await fetch(`${stellarEnv.friendbotUrl}?addr=${encodeURIComponent(publicKey)}`);
+            if (!fbRes.ok) {
+              const text = await fbRes.text();
+              console.error('[stellar-activate] friendbot failed:', text.slice(0, 200));
+              return sendJson(res, { error: 'Friendbot falhou' }, 502);
+            }
+            return sendJson(res, { funded: true, existed: false });
+          }
+
+          if (parsed.pathname === '/api/stellar-submit' && method === 'POST') {
+            const { signedXdr } = JSON.parse(await readBody(req)) as { signedXdr: string };
+            const submitRes = await fetch(`${stellarEnv.horizonUrl}/transactions`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+              body: new URLSearchParams({ tx: signedXdr }),
+            });
+            const data = await submitRes.json() as { hash?: string; extras?: { result_codes?: { transaction?: string; operations?: string[] } } };
+            if (!submitRes.ok) {
+              const rc = data.extras?.result_codes;
+              const ops = rc?.operations?.length ? `, ops=[${rc.operations.join(',')}]` : '';
+              const msg = `tx_result=${rc?.transaction ?? 'unknown'}${ops}`;
+              console.error('[stellar-submit] failed:', msg);
+              return sendJson(res, { error: msg }, 400);
+            }
+            return sendJson(res, { hash: data.hash });
+          }
+
+          return sendJson(res, { error: 'Not found' }, 404);
+        } catch (err) {
+          const e = err as Error;
+          console.error('[stellar]', e.message);
+          return sendJson(res, { error: e.message ?? 'Internal error' }, 500);
+        }
+      });
+    },
+  };
+}
+
 /**
  * Etherfuse off-ramp proxy. Runs as Vite middleware so the API key stays
  * server-side and `npm run dev` boots both UI and proxy in one terminal.
@@ -79,6 +171,11 @@ function etherfuseApi(env: ApiEnv): Plugin {
         const method = req.method ?? 'GET';
 
         try {
+          const auth = (req.headers['authorization'] as string | undefined) ?? '';
+          if (!auth.startsWith('Bearer ')) {
+            return sendJson(res, { error: 'Não autorizado' }, 401);
+          }
+
           // POST /api/ef-onboarding → POST /ramp/onboarding-url
           // Returns canonical { customerId, bankAccountId, kycUrl }. If the wallet
           // is already onboarded under a different customer ("see org: XYZ"), we
@@ -154,11 +251,17 @@ function etherfuseApi(env: ApiEnv): Plugin {
               quoteAssets: { type: 'offramp', sourceAsset: env.tesouroAsset, targetAsset: 'BRL' },
               sourceAmount,
             }) as Record<string, string | null>;
+            // Off-ramp: source=TESOURO, dest=BRL → rate = dest/source (BRL per TESOURO).
+            // Compute from amounts when Etherfuse omits exchangeRate (sandbox quirk).
+            const destAmt = data.destinationAmountAfterFee ?? data.destinationAmount ?? '0';
+            const srcN = parseFloat(data.sourceAmount ?? '0');
+            const destN = parseFloat(destAmt);
+            const computedRate = srcN > 0 ? destN / srcN : 0;
             return sendJson(res, {
               quoteId: data.quoteId,
               sourceAmount: data.sourceAmount,
-              destinationAmount: data.destinationAmountAfterFee ?? data.destinationAmount ?? '0',
-              exchangeRate: data.exchangeRate ?? '1',
+              destinationAmount: destAmt,
+              exchangeRate: data.exchangeRate ?? String(computedRate),
               fee: data.feeAmount ?? '0',
               expiresAt: data.expiresAt ?? '',
             });
@@ -185,20 +288,33 @@ function etherfuseApi(env: ApiEnv): Plugin {
             });
           }
 
-          // POST /api/ef-onramp-quote → POST /ramp/quote (BRL → TESOURO)
+          // POST /api/ef-onramp-quote → POST /ramp/quote (BRL → TESOURO).
+          // Pass `walletAddress` when known so Etherfuse can detect missing
+          // trustlines/accounts and include the one-time setup cost in the
+          // fee — without it, the order endpoint rejects new wallets with
+          // "trustline not found".
           if (parsed.pathname === '/api/ef-onramp-quote' && method === 'POST') {
-            const { customerId, sourceAmount } = JSON.parse(await readBody(req));
+            const { customerId, sourceAmount, walletAddress } = JSON.parse(await readBody(req)) as {
+              customerId: string; sourceAmount: string; walletAddress?: string;
+            };
             const quoteId = randomUUID();
-            const data = await efetch(env, 'POST', '/ramp/quote', {
+            const body: Record<string, unknown> = {
               quoteId, customerId, blockchain: 'stellar',
               quoteAssets: { type: 'onramp', sourceAsset: 'BRL', targetAsset: env.tesouroAsset },
               sourceAmount,
-            }) as Record<string, string | null>;
+            };
+            if (walletAddress) body.walletAddress = walletAddress;
+            const data = await efetch(env, 'POST', '/ramp/quote', body) as Record<string, string | null>;
+            // On-ramp: source=BRL, dest=TESOURO → rate (BRL per TESOURO) = source/dest.
+            const destAmt = data.destinationAmountAfterFee ?? data.destinationAmount ?? '0';
+            const srcN = parseFloat(data.sourceAmount ?? '0');
+            const destN = parseFloat(destAmt);
+            const computedRate = destN > 0 ? srcN / destN : 0;
             return sendJson(res, {
               quoteId: data.quoteId,
               sourceAmount: data.sourceAmount,
-              destinationAmount: data.destinationAmountAfterFee ?? data.destinationAmount ?? '0',
-              exchangeRate: data.exchangeRate ?? '1',
+              destinationAmount: destAmt,
+              exchangeRate: data.exchangeRate ?? String(computedRate),
               fee: data.feeAmount ?? '0',
               expiresAt: data.expiresAt ?? '',
             });
@@ -223,7 +339,114 @@ function etherfuseApi(env: ApiEnv): Plugin {
             });
           }
 
+          // POST /api/ef-sandbox-approve — fast-forwards KYC AND accepts both
+          // required agreements in one shot. Order matters: docs upload runs
+          // FIRST because calling /ramp/onboarding-url for an existing customer
+          // appears to disrupt the next docs-upload auto-approval. After docs
+          // settle, we refresh the presigned URL (needed as auth for agreements)
+          // and post the two agreement acceptances. Each step is best-effort —
+          // re-calling for an already-approved/already-accepted customer just
+          // gets caught and we move on. Gated server-side on the base URL.
+          if (parsed.pathname === '/api/ef-sandbox-approve' && method === 'POST') {
+            if (!env.baseUrl.includes('sand')) {
+              return sendJson(res, { error: 'Sandbox approve indisponível fora do ambiente sandbox' }, 403);
+            }
+            const { customerId, publicKey, bankAccountId } = JSON.parse(await readBody(req)) as {
+              customerId: string; publicKey: string; bankAccountId: string;
+            };
+
+            // 1. Submit programmatic KYC with PII — sandbox auto-approves on
+            //    success AND populates the fields (esp. phoneNumber) that the
+            //    customer-agreement endpoint later requires. Using /kyc rather
+            //    than /kyc/documents because the latter doesn't set PII and
+            //    runs into "Too many pending documents" on retries.
+            let kycStatus: string | null = null;
+            try {
+              // Docs claim no `id` field exists, but the live deserializer
+              // demands one — column count from the error matches the inner
+              // identity close, so `id` is required INSIDE identity.
+              // Using customerId since that's the only UUID we have handy.
+              const kycData = await efetch(env, 'POST', `/ramp/customer/${customerId}/kyc`, {
+                pubkey: publicKey,
+                identity: { id: customerId, ...SANDBOX_KYC_IDENTITY },
+              }) as { status?: string };
+              kycStatus = kycData.status ?? null;
+            } catch (err) {
+              console.log('[ef-sandbox-approve] /kyc failed (likely already approved):', (err as Error).message);
+              try {
+                const statusData = await efetch(env, 'GET', `/ramp/customer/${customerId}/kyc/${publicKey}`) as { status?: string };
+                kycStatus = statusData.status ?? null;
+              } catch { /* keep null */ }
+            }
+
+            // 2. (Removed — the agreement loop below fetches a fresh URL per call.)
+
+            // 3. Accept all THREE required agreements. Fetch a FRESH presigned
+            //    URL before each call in case the token is single-use, and
+            //    log the response body so we can see whether the API is
+            //    returning {success: false} on 200 (which our efetch wouldn't
+            //    treat as an error).
+            const freshUrl = async (): Promise<string | null> => {
+              try {
+                const data = await efetch(env, 'POST', '/ramp/onboarding-url', {
+                  customerId, bankAccountId, publicKey, blockchain: 'stellar',
+                }) as { presigned_url?: string };
+                return data.presigned_url ?? null;
+              } catch (err) {
+                console.log('[ef-sandbox-approve] freshUrl failed:', (err as Error).message);
+                return null;
+              }
+            };
+
+            const agreementCalls: Array<[string, (url: string) => Record<string, unknown>]> = [
+              ['/ramp/agreements/electronic-signature', (url) => ({ presignedUrl: url })],
+              ['/ramp/agreements/terms-and-conditions', (url) => ({ presignedUrl: url })],
+              // customerInfo omitted — programmatic KYC already submitted identity data
+              ['/ramp/agreements/customer-agreement', (url) => ({ presignedUrl: url })],
+            ];
+            for (const [path, buildBody] of agreementCalls) {
+              const url = await freshUrl();
+              if (!url) continue;
+              try {
+                const result = await efetch(env, 'POST', path, buildBody(url));
+                console.log(`[ef-sandbox-approve] ${path} →`, JSON.stringify(result));
+              } catch (err) {
+                console.log(`[ef-sandbox-approve] ${path} failed:`, (err as Error).message);
+              }
+            }
+
+            return sendJson(res, { ok: true, data: { status: kycStatus } });
+          }
+
+          // POST /api/ef-onramp-simulate-payment — sandbox-only shortcut that
+          // tells Etherfuse to flip the order to "paid" without an actual PIX
+          // having been sent. Hits /ramp/order/fiat_received. Gated server-side
+          // on the base URL containing "sand" so this is a 403 in production
+          // regardless of any client-side flag.
+          if (parsed.pathname === '/api/ef-onramp-simulate-payment' && method === 'POST') {
+            if (!env.baseUrl.includes('sand')) {
+              return sendJson(res, { error: 'Simulação de PIX indisponível fora do sandbox' }, 403);
+            }
+            const { orderId } = JSON.parse(await readBody(req)) as { orderId: string };
+            await efetch(env, 'POST', '/ramp/order/fiat_received', { orderId });
+            return sendJson(res, { ok: true });
+          }
+
           // GET /api/ef-onramp-order?orderId=... — poll for completion.
+          // POST /api/ef-onramp-claim-tx — proxies to /ramp/order/{id}/regenerate_tx,
+          // which returns a fresh Stellar claim XDR for completed on-ramp orders.
+          // Fallback for when the order GET response comes back without the
+          // stored stellarClaimTransaction (observed with sandbox simulate-deposit).
+          if (parsed.pathname === '/api/ef-onramp-claim-tx' && method === 'POST') {
+            const { orderId } = JSON.parse(await readBody(req)) as { orderId: string };
+            const data = await efetch(env, 'POST', `/ramp/order/${orderId}/regenerate_tx`) as {
+              stellarClaimTransaction?: string;
+            };
+            return sendJson(res, {
+              stellarClaimTransaction: data.stellarClaimTransaction ?? null,
+            });
+          }
+
           if (parsed.pathname === '/api/ef-onramp-order' && method === 'GET') {
             const orderId = parsed.searchParams.get('orderId');
             const data = await efetch(env, 'GET', `/ramp/order/${orderId}`) as Record<string, unknown>;
@@ -233,7 +456,90 @@ function etherfuseApi(env: ApiEnv): Plugin {
               confirmedTxSignature: data.confirmedTxSignature ?? null,
               amountInTokens: data.amountInTokens ?? null,
               amountInFiat: data.amountInFiat ?? null,
+              feeAmountInFiat: data.feeAmountInFiat ?? null,
+              // Stellar-only: present when the wallet lacked a trustline and
+              // Etherfuse delivered via a claimable balance. The client must
+              // sign and submit this XDR to add the trustline + claim tokens.
+              stellarClaimTransaction: data.stellarClaimTransaction ?? null,
+              stellarClaimableBalanceId: data.stellarClaimableBalanceId ?? null,
             });
+          }
+
+          // POST /api/ef-kyc-submit — submits KYC identity data to Etherfuse then
+          // accepts all three required agreements. Used by the programmatic KYC
+          // wizard; replaces the hosted-UI iframe for identity collection.
+          if (parsed.pathname === '/api/ef-kyc-submit' && method === 'POST') {
+            const {
+              customerId, bankAccountId, publicKey,
+              givenName, familyName, cpf, birthDate,
+              addressStreet, addressCity, addressState, addressPostalCode,
+            } = JSON.parse(await readBody(req)) as {
+              customerId: string; bankAccountId: string; publicKey: string;
+              givenName: string; familyName: string; cpf: string; birthDate: string;
+              addressStreet: string; addressCity: string; addressState: string; addressPostalCode: string;
+            };
+
+            let kycStatus: string | null = null;
+            try {
+              const kycData = await efetch(env, 'POST', `/ramp/customer/${customerId}/kyc`, {
+                pubkey: publicKey,
+                identity: {
+                  id: customerId,
+                  name: { givenName, familyName },
+                  dateOfBirth: birthDate,
+                  address: { street: addressStreet, city: addressCity, region: addressState, postalCode: addressPostalCode, country: 'BR' },
+                  idNumbers: [{ value: cpf, type: 'CPF' }],
+                },
+              }) as { status?: string };
+              kycStatus = kycData.status ?? null;
+            } catch (err) {
+              console.log('[ef-kyc-submit] /kyc failed (may already be submitted):', (err as Error).message);
+              try {
+                const s = await efetch(env, 'GET', `/ramp/customer/${customerId}/kyc/${publicKey}`) as { status?: string };
+                kycStatus = s.status ?? null;
+              } catch { /* keep null */ }
+            }
+
+            const freshUrl = async (): Promise<string | null> => {
+              try {
+                const d = await efetch(env, 'POST', '/ramp/onboarding-url', {
+                  customerId, bankAccountId, publicKey, blockchain: 'stellar',
+                }) as { presigned_url?: string };
+                return d.presigned_url ?? null;
+              } catch { return null; }
+            };
+
+            for (const path of [
+              '/ramp/agreements/electronic-signature',
+              '/ramp/agreements/terms-and-conditions',
+              '/ramp/agreements/customer-agreement',
+            ]) {
+              const url = await freshUrl();
+              if (!url) continue;
+              try {
+                await efetch(env, 'POST', path, { presignedUrl: url });
+              } catch (err) {
+                console.log(`[ef-kyc-submit] ${path} failed:`, (err as Error).message);
+              }
+            }
+
+            return sendJson(res, { ok: true, kycStatus });
+          }
+
+          // POST /api/ef-kyc-documents — uploads KYC document images to Etherfuse.
+          // documentType: 'document' (id_front + id_back) or 'selfie'.
+          if (parsed.pathname === '/api/ef-kyc-documents' && method === 'POST') {
+            const { customerId, publicKey, documentType, images } = JSON.parse(await readBody(req)) as {
+              customerId: string; publicKey: string;
+              documentType: 'document' | 'selfie';
+              images: Array<{ label: string; image: string }>;
+            };
+            await efetch(env, 'POST', `/ramp/customer/${customerId}/kyc/documents`, {
+              pubkey: publicKey,
+              documentType,
+              images,
+            });
+            return sendJson(res, { ok: true });
           }
 
           return sendJson(res, { error: 'Not found' }, 404);
@@ -254,11 +560,17 @@ export default defineConfig(({ mode }) => {
     baseUrl: (raw.ETHERFUSE_BASE_URL ?? 'https://api.sand.etherfuse.com').replace(/\/$/, ''),
     tesouroAsset: `${raw.VITE_TESOURO_CODE ?? 'TESOURO'}:${raw.VITE_TESOURO_ISSUER ?? ''}`,
   };
+  const isMainnet = (raw.VITE_STELLAR_NETWORK ?? 'TESTNET') === 'PUBLIC';
+  const stellarEnv = {
+    network: raw.VITE_STELLAR_NETWORK ?? 'TESTNET',
+    horizonUrl: (raw.VITE_HORIZON_URL ?? (isMainnet ? 'https://horizon.stellar.org' : 'https://horizon-testnet.stellar.org')).replace(/\/$/, ''),
+    friendbotUrl: 'https://friendbot.stellar.org',
+  };
 
   return {
-    // Order matters: etherfuseApi first so its middleware is installed before
+    // Order matters: API plugins first so their middleware is installed before
     // Vite's SPA-fallback that returns index.html for unknown routes.
-    plugins: [etherfuseApi(apiEnv), react()],
+    plugins: [stellarApi(stellarEnv), etherfuseApi(apiEnv), react()],
     resolve: {
       alias: {
         '@': path.resolve(__dirname, './src'),

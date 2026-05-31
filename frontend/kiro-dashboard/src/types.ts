@@ -39,8 +39,7 @@ export interface NavItem {
 export type NavId =
   | 'resumo'
   | 'transacoes'
-  | 'recebimentos'
-  | 'extrato'
+  | 'analise'
   | 'links'
   | 'clientes'
   | 'relatorios'

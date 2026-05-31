@@ -1,19 +1,21 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
+import { useWallet } from '@/context/WalletContext';
 import { Sidebar } from '@/components/Sidebar';
 import { Header } from '@/components/Header';
 import { MobileHeader } from '@/components/mobile/MobileHeader';
 import { MobileBottomNav } from '@/components/mobile/MobileBottomNav';
 import { ReceberPixModal } from '@/components/ReceberPixModal';
 import { SacarPixModal } from '@/components/SacarPixModal';
+import { WalletSignModal } from '@/components/WalletSignModal';
+import { CompleteOnboardingModal } from '@/components/CompleteOnboardingModal';
 import Resumo from '@/pages/Resumo';
-// On /resumo, "Receber via PIX" triggers the off-ramp flow (TESOURO → BRL).
-// On /recebimentos, the same prop name still means "receive a customer payment"
-// — so each route wires the prop to a different handler.
+// On /resumo "Receber via PIX" triggers the off-ramp flow (TESOURO → BRL).
+// On /transacoes the same prop means "receive a customer payment" (on-ramp),
+// so each route wires onReceive to a different handler.
 import Transacoes from '@/pages/Transacoes';
-import Recebimentos from '@/pages/Recebimentos';
 import Configuracoes from '@/pages/Configuracoes';
-import Placeholder from '@/pages/Placeholder';
+import MobileMais from '@/pages/MobileMais';
 
 /**
  * Application shell.
@@ -27,6 +29,7 @@ import Placeholder from '@/pages/Placeholder';
  * can open it via the `onReceive` prop.
  */
 export default function App() {
+  const { publicKey } = useWallet();
   const [pixOpen, setPixOpen] = useState(false);
   const openPix = () => setPixOpen(true);
   const closePix = () => setPixOpen(false);
@@ -34,6 +37,12 @@ export default function App() {
   const [sacarOpen, setSacarOpen] = useState(false);
   const openSacar = () => setSacarOpen(true);
   const closeSacar = () => setSacarOpen(false);
+
+  // Tying every form-holding modal's React identity to the current wallet
+  // forces a full remount when the merchant logs out and a different account
+  // logs in — without this, the modals keep their useState from the previous
+  // user (LGPD violation: PII leaks between accounts on the same browser).
+  const sessionKey = publicKey ?? 'anon';
 
   return (
     <div className="flex min-h-screen">
@@ -66,15 +75,9 @@ export default function App() {
             <Routes>
               <Route path="/" element={<Navigate to="/resumo" replace />} />
               <Route path="/resumo" element={<Resumo onReceive={openSacar} />} />
-              <Route path="/transacoes" element={<Transacoes />} />
-              <Route path="/recebimentos" element={<Recebimentos onReceive={openPix} />} />
-              <Route path="/extrato" element={<Placeholder name="Extrato" />} />
-              <Route path="/links" element={<Placeholder name="Links de Pagamento" />} />
-              <Route path="/clientes" element={<Placeholder name="Clientes" />} />
-              <Route path="/relatorios" element={<Placeholder name="Relatórios" />} />
-              <Route path="/integracoes" element={<Placeholder name="Integrações" />} />
-              <Route path="/config" element={<Configuracoes />} />
-              <Route path="/mais" element={<Placeholder name="Mais" />} />
+              <Route path="/transacoes" element={<Transacoes onReceive={openPix} />} />
+              <Route path="/mais" element={<MobileMais />} />
+              <Route path="/config" element={<RequireAuth><Configuracoes /></RequireAuth>} />
               <Route path="*" element={<Navigate to="/resumo" replace />} />
             </Routes>
           </div>
@@ -85,8 +88,16 @@ export default function App() {
         <MobileBottomNav />
       </div>
 
-      <ReceberPixModal open={pixOpen} onClose={closePix} />
-      <SacarPixModal open={sacarOpen} onClose={closeSacar} />
+      <ReceberPixModal key={`receber-${sessionKey}`} open={pixOpen} onClose={closePix} />
+      <SacarPixModal key={`sacar-${sessionKey}`} open={sacarOpen} onClose={closeSacar} />
+      <WalletSignModal />
+      <CompleteOnboardingModal key={`onboarding-${sessionKey}`} />
     </div>
   );
+}
+
+function RequireAuth({ children }: { children: ReactNode }) {
+  const { isConnected } = useWallet();
+  if (!isConnected) return <Navigate to="/resumo" replace />;
+  return <>{children}</>;
 }

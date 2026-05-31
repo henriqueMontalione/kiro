@@ -1,27 +1,32 @@
-import { Eye, EyeOff, RefreshCw, Sparkles } from 'lucide-react';
+import { useState } from 'react';
+import { Eye, EyeOff, Loader2, RefreshCw, Sparkles, Wallet } from 'lucide-react';
 import { Card } from '../Card';
 import { Button } from '../Button';
+import { YieldInfoModal } from '../YieldInfoModal';
 import { YIELD_APY_LABEL } from '@/lib/mocks';
 import { useWallet } from '@/context/WalletContext';
 import { useDashboard } from '@/context/DashboardContext';
-import { formatBRL } from '@/lib/stellar';
+import { useQuote } from '@/context/QuoteContext';
 
 interface MobileBalanceCardProps {
   onReceive: () => void;
 }
 
 export function MobileBalanceCard({ onReceive }: MobileBalanceCardProps) {
+  const [yieldOpen, setYieldOpen] = useState(false);
   const { isConnected, balance } = useWallet();
   const { valuesHidden, toggleValuesHidden, refresh, isRefreshing } = useDashboard();
+  const { formatTesouroAsBRL } = useQuote();
 
-  const displayBalance = isConnected && balance !== null ? formatBRL(balance) : 'R$ 0,00';
+  const displayBalance =
+    isConnected && balance !== null ? formatTesouroAsBRL(balance) : null;
   const isBlurred = !isConnected || valuesHidden;
 
   return (
     <Card>
       <div className="flex items-center justify-between mb-3">
         <span className="k-eyebrow">Saldo Disponível</span>
-        {isConnected && (
+        {isConnected ? (
           <div className="flex items-center gap-1">
             <button
               type="button"
@@ -44,27 +49,52 @@ export function MobileBalanceCard({ onReceive }: MobileBalanceCardProps) {
               {valuesHidden ? <EyeOff size={18} strokeWidth={1.6} /> : <Eye size={18} strokeWidth={1.6} />}
             </button>
           </div>
+        ) : (
+          <div
+            className="inline-flex items-center justify-center rounded-full flex-shrink-0"
+            style={{
+              width: 36,
+              height: 36,
+              background: 'rgba(0,255,135,0.10)',
+              border: '1px solid rgba(0,255,135,0.22)',
+              color: 'var(--kiro-green)',
+            }}
+            aria-hidden="true"
+          >
+            <Wallet size={17} strokeWidth={1.6} />
+          </div>
         )}
       </div>
 
-      <div
-        className="k-money font-medium"
-        style={{
-          fontSize: 38,
-          lineHeight: 1.1,
-          color: 'var(--kiro-green)',
-          textShadow: '0 0 24px rgba(0,255,135,0.28)',
-          letterSpacing: '-0.01em',
-          filter: isBlurred ? 'blur(12px)' : 'none',
-          transition: 'filter 200ms ease-out',
-          userSelect: isBlurred ? 'none' : 'auto',
-        }}
-      >
-        {displayBalance}
-      </div>
+      {displayBalance !== null ? (
+        <div
+          className="k-money font-medium"
+          style={{
+            fontSize: 38,
+            lineHeight: 1.1,
+            color: 'var(--kiro-green)',
+            textShadow: '0 0 24px rgba(0,255,135,0.28)',
+            letterSpacing: '-0.01em',
+            filter: isBlurred ? 'blur(12px)' : 'none',
+            transition: 'filter 200ms ease-out',
+            userSelect: isBlurred ? 'none' : 'auto',
+          }}
+        >
+          {displayBalance}
+        </div>
+      ) : (
+        <div className="flex items-center gap-2" style={{ height: 42 }}>
+          {isConnected
+            ? <Loader2 size={20} strokeWidth={1.6} className="animate-spin" style={{ color: 'var(--fg-3)' }} />
+            : <span className="k-money font-medium" style={{ fontSize: 38, lineHeight: 1.1, color: 'var(--fg-3)' }}>R$ 0,00</span>
+          }
+        </div>
+      )}
 
-      <div
-        className="inline-flex items-center gap-[6px] mt-3 rounded-full font-sans text-[12px] text-[var(--kiro-green)]"
+      <button
+        type="button"
+        onClick={() => setYieldOpen(true)}
+        className="inline-flex items-center gap-[6px] mt-3 rounded-full font-sans text-[12px] text-[var(--kiro-green)] bg-transparent border-none cursor-pointer transition-opacity hover:opacity-80"
         style={{
           padding: '5px 10px',
           background: 'rgba(0,255,135,0.10)',
@@ -73,7 +103,8 @@ export function MobileBalanceCard({ onReceive }: MobileBalanceCardProps) {
       >
         <Sparkles size={13} strokeWidth={1.8} />
         Rendendo {YIELD_APY_LABEL}
-      </div>
+      </button>
+      <YieldInfoModal open={yieldOpen} onClose={() => setYieldOpen(false)} />
 
       <div className="mt-5">
         <Button variant="secondary" size="lg" onClick={onReceive} className="w-full justify-center">

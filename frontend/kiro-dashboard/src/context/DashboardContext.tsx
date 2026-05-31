@@ -2,7 +2,11 @@ import { createContext, useCallback, useContext, useState, type ReactNode } from
 import { useWallet } from './WalletContext';
 
 interface DashboardState {
-  /** When true, all currency values across the Resumo screen are blurred. */
+  /**
+   * When true, all currency values across the Resumo screen are blurred.
+   * Defaults to `true` on every app mount so a fresh login (or page reload)
+   * starts with values hidden — the merchant chooses when to reveal.
+   */
   valuesHidden: boolean;
   toggleValuesHidden: () => void;
   /** Increments whenever the user clicks "refresh". Cards include this in their
@@ -18,7 +22,7 @@ const DashboardContext = createContext<DashboardState | null>(null);
 
 export function DashboardProvider({ children }: { children: ReactNode }) {
   const { refreshBalance } = useWallet();
-  const [valuesHidden, setValuesHidden] = useState(false);
+  const [valuesHidden, setValuesHidden] = useState(true);
   const [refreshTick, setRefreshTick] = useState(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
 

@@ -5,33 +5,23 @@ import { StatusTag, type Status } from '../StatusTag';
 import type { Transaction } from '@/types';
 import { useWallet } from '@/context/WalletContext';
 import { useDashboard } from '@/context/DashboardContext';
-import { fetchTesouroPayments, type WalletPayment } from '@/lib/stellar';
+import { useTransactions } from '@/context/TransactionsContext';
+import type { WalletPayment } from '@/lib/stellar';
 
 interface TransactionsCardProps {
   onSeeAll: () => void;
 }
 
-/** "Transações Recentes" — most recent TESOURO movements from Horizon. */
+/** "Transações Recentes" — most recent TESOURO movements recorded by the backend. */
 export function TransactionsCard({ onSeeAll }: TransactionsCardProps) {
-  const { publicKey, balance, isConnected } = useWallet();
+  const { isConnected } = useWallet();
   const { valuesHidden, refreshTick } = useDashboard();
-  // `null` = haven't fetched yet (show skeleton). `[]` = fetched but empty.
-  const [payments, setPayments] = useState<WalletPayment[] | null>(null);
+  const { payments: allPayments, refresh } = useTransactions();
+  const payments = isConnected ? allPayments.slice(0, 5) : null;
 
-  // Re-fetch when wallet changes OR when balance changes (e.g. after an
-  // off-ramp completes and refreshBalance fires 6s later), OR when the
-  // user manually triggers a refresh from the toolbar.
   useEffect(() => {
-    if (!publicKey) {
-      setPayments(null);
-      return;
-    }
-    let cancelled = false;
-    fetchTesouroPayments(publicKey, 5).then((p) => {
-      if (!cancelled) setPayments(p);
-    });
-    return () => { cancelled = true; };
-  }, [publicKey, balance, refreshTick]);
+    if (refreshTick > 0) refresh();
+  }, [refreshTick, refresh]);
 
   return (
     <Card className="!p-[18px]">
@@ -51,7 +41,7 @@ export function TransactionsCard({ onSeeAll }: TransactionsCardProps) {
 
       <div className="flex flex-col gap-[2px]">
         {!isConnected && (
-          <EmptyState message="Conecte sua carteira para ver suas movimentações." />
+          <EmptyState message="Entre na sua conta para ver suas movimentações." />
         )}
         {isConnected && payments === null && <SkeletonRows count={3} />}
         {isConnected && payments && payments.length === 0 && (
@@ -116,6 +106,14 @@ function EmptyState({ message }: { message: string }) {
 }
 
 function WalletPaymentRow({ payment, valuesHidden }: { payment: WalletPayment; valuesHidden: boolean }) {
+  const [pressing, setPressing] = useState(false);
+  const revealed = !valuesHidden || pressing;
+
+  const startPress = () => {
+    if (valuesHidden) setPressing(true);
+  };
+  const endPress = () => setPressing(false);
+
   const isOut = payment.direction === 'out';
   const Icon = isOut ? ArrowUpRight : ShoppingBag;
   const label = isOut ? 'Saque via PIX' : 'Pagamento recebido';
@@ -127,6 +125,19 @@ function WalletPaymentRow({ payment, valuesHidden }: { payment: WalletPayment; v
         gridTemplateColumns: '36px 1fr auto 110px 100px',
         gap: 16,
         padding: '14px 12px',
+        WebkitUserSelect: 'none',
+        userSelect: 'none',
+        WebkitTouchCallout: 'none',
+        touchAction: 'manipulation',
+      }}
+      onMouseDown={startPress}
+      onMouseUp={endPress}
+      onMouseLeave={endPress}
+      onTouchStart={startPress}
+      onTouchEnd={endPress}
+      onTouchCancel={endPress}
+      onContextMenu={(e) => {
+        if (valuesHidden) e.preventDefault();
       }}
     >
       <div
@@ -145,9 +156,8 @@ function WalletPaymentRow({ payment, valuesHidden }: { payment: WalletPayment; v
         className="k-money text-[14px] text-right"
         style={{
           color: isOut ? '#FF4D6D' : 'var(--fg-1)',
-          filter: valuesHidden ? 'blur(6px)' : 'none',
+          filter: revealed ? 'none' : 'blur(6px)',
           transition: 'filter 200ms ease-out',
-          userSelect: valuesHidden ? 'none' : 'auto',
         }}
       >
         {isOut ? '− ' : '+ '}

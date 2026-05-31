@@ -2,8 +2,6 @@ import { NavLink } from 'react-router-dom';
 import {
   House,
   ArrowLeftRight,
-  QrCode,
-  ReceiptText,
   Link2,
   Users,
   BarChart3,
@@ -18,8 +16,6 @@ import { ProUpgradeCard } from './ProUpgradeCard';
 const ICON_MAP: Record<string, LucideIcon> = {
   House,
   ArrowLeftRight,
-  QrCode,
-  ReceiptText,
   Link2,
   Users,
   BarChart3,

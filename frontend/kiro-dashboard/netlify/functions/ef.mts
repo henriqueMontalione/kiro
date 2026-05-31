@@ -1,17 +1,46 @@
 import { randomUUID } from 'node:crypto';
+import { createRemoteJWKSet, jwtVerify } from 'jose';
 
 /**
  * Etherfuse off/on-ramp proxy — production counterpart of the `etherfuseApi`
  * Vite plugin in `vite.config.ts`. Same endpoints, same shapes, same recovery
  * logic for the "wallet already onboarded" 409.
  *
- * Reads ETHERFUSE_API_KEY from server-side env vars so the key never reaches
- * the browser bundle.
+ * Security:
+ *   - Every endpoint requires a valid Privy JWT (Authorization: Bearer <token>).
+ *   - ETHERFUSE_API_KEY is read server-side only — never reaches the browser.
  */
 
 const API_KEY = process.env.ETHERFUSE_API_KEY ?? '';
 const BASE_URL = (process.env.ETHERFUSE_BASE_URL ?? 'https://api.sand.etherfuse.com').replace(/\/$/, '');
 const TESOURO_ASSET = `${process.env.VITE_TESOURO_CODE ?? 'TESOURO'}:${process.env.VITE_TESOURO_ISSUER ?? ''}`;
+const PRIVY_APP_ID = process.env.VITE_PRIVY_APP_ID ?? '';
+
+const JWKS = PRIVY_APP_ID
+  ? createRemoteJWKSet(
+      new URL(`https://auth.privy.io/api/v1/apps/${PRIVY_APP_ID}/jwks.json`),
+    )
+  : null;
+
+async function verifyPrivyAuth(req: Request): Promise<string> {
+  if (!JWKS || !PRIVY_APP_ID) {
+    throw Object.assign(new Error('PRIVY_APP_ID não configurado'), { status: 500 });
+  }
+  const auth = req.headers.get('Authorization') ?? '';
+  if (!auth.startsWith('Bearer ')) {
+    throw Object.assign(new Error('Não autorizado'), { status: 401 });
+  }
+  const token = auth.slice(7);
+  try {
+    const { payload } = await jwtVerify(token, JWKS, {
+      issuer: 'privy.io',
+      audience: PRIVY_APP_ID,
+    });
+    return payload.sub as string;
+  } catch {
+    throw Object.assign(new Error('Token inválido ou expirado'), { status: 401 });
+  }
+}
 
 interface ErrorWithStatus extends Error {
   status?: number;
@@ -58,11 +87,31 @@ function json(data: unknown, status = 200): Response {
   });
 }
 
+// Identity payload for the /kyc submission and customerInfo for the
+// customer-agreement acceptance. See vite.config.ts for the long comment
+// on why customerInfo needs the full ProofOfIdentityUserInfo shape.
+const SANDBOX_KYC_IDENTITY = {
+  name: { givenName: 'Sandbox', familyName: 'Tester' },
+  dateOfBirth: '1990-01-15',
+  phoneNumber: '+5511999999999',
+  address: {
+    street: 'Av. Paulista 1000',
+    city: 'Sao Paulo',
+    region: 'SP',
+    postalCode: '01310100',
+    country: 'BR',
+  },
+  idNumbers: [{ value: '00000000191', type: 'CPF' }],
+};
+
+
 export default async (req: Request): Promise<Response> => {
   const url = new URL(req.url);
   const method = req.method;
 
   try {
+    await verifyPrivyAuth(req);
+
     // POST /api/ef-onboarding — onboards a wallet, recovering existing
     // customer if the wallet is already registered under another org.
     if (url.pathname === '/api/ef-onboarding' && method === 'POST') {
@@ -131,11 +180,15 @@ export default async (req: Request): Promise<Response> => {
         quoteAssets: { type: 'offramp', sourceAsset: TESOURO_ASSET, targetAsset: 'BRL' },
         sourceAmount,
       })) as Record<string, string | null>;
+      const destAmt = data.destinationAmountAfterFee ?? data.destinationAmount ?? '0';
+      const srcN = parseFloat(data.sourceAmount ?? '0');
+      const destN = parseFloat(destAmt);
+      const computedRate = srcN > 0 ? destN / srcN : 0;
       return json({
         quoteId: data.quoteId,
         sourceAmount: data.sourceAmount,
-        destinationAmount: data.destinationAmountAfterFee ?? data.destinationAmount ?? '0',
-        exchangeRate: data.exchangeRate ?? '1',
+        destinationAmount: destAmt,
+        exchangeRate: data.exchangeRate ?? String(computedRate),
         fee: data.feeAmount ?? '0',
         expiresAt: data.expiresAt ?? '',
       });
@@ -164,20 +217,30 @@ export default async (req: Request): Promise<Response> => {
       });
     }
 
-    // POST /api/ef-onramp-quote — on-ramp (BRL → TESOURO)
+    // POST /api/ef-onramp-quote — on-ramp (BRL → TESOURO). See vite.config.ts
+    // comment for why walletAddress matters (trustline auto-setup).
     if (url.pathname === '/api/ef-onramp-quote' && method === 'POST') {
-      const { customerId, sourceAmount } = (await req.json()) as { customerId: string; sourceAmount: string };
+      const { customerId, sourceAmount, walletAddress } = (await req.json()) as {
+        customerId: string; sourceAmount: string; walletAddress?: string;
+      };
       const quoteId = randomUUID();
-      const data = (await efetch('POST', '/ramp/quote', {
+      const body: Record<string, unknown> = {
         quoteId, customerId, blockchain: 'stellar',
         quoteAssets: { type: 'onramp', sourceAsset: 'BRL', targetAsset: TESOURO_ASSET },
         sourceAmount,
-      })) as Record<string, string | null>;
+      };
+      if (walletAddress) body.walletAddress = walletAddress;
+      const data = (await efetch('POST', '/ramp/quote', body)) as Record<string, string | null>;
+      // On-ramp: source=BRL, dest=TESOURO → rate (BRL per TESOURO) = source/dest.
+      const destAmt = data.destinationAmountAfterFee ?? data.destinationAmount ?? '0';
+      const srcN = parseFloat(data.sourceAmount ?? '0');
+      const destN = parseFloat(destAmt);
+      const computedRate = destN > 0 ? srcN / destN : 0;
       return json({
         quoteId: data.quoteId,
         sourceAmount: data.sourceAmount,
-        destinationAmount: data.destinationAmountAfterFee ?? data.destinationAmount ?? '0',
-        exchangeRate: data.exchangeRate ?? '1',
+        destinationAmount: destAmt,
+        exchangeRate: data.exchangeRate ?? String(computedRate),
         fee: data.feeAmount ?? '0',
         expiresAt: data.expiresAt ?? '',
       });
@@ -203,6 +266,91 @@ export default async (req: Request): Promise<Response> => {
       });
     }
 
+    // POST /api/ef-sandbox-approve — fast-forwards KYC AND accepts both
+    // required agreements in one shot. Order matters — see vite.config.ts
+    // for the long-form comment. Gated server-side on BASE_URL.
+    if (url.pathname === '/api/ef-sandbox-approve' && method === 'POST') {
+      if (!BASE_URL.includes('sand')) {
+        return json({ error: 'Sandbox approve indisponível fora do ambiente sandbox' }, 403);
+      }
+      const { customerId, publicKey, bankAccountId } = (await req.json()) as {
+        customerId: string; publicKey: string; bankAccountId: string;
+      };
+
+      // 1. Submit programmatic KYC with PII — sandbox auto-approves on success
+      //    AND populates phoneNumber etc. that the agreements need.
+      let kycStatus: string | null = null;
+      try {
+        // Docs claim no `id` field exists, but the live deserializer demands
+        // one INSIDE identity (column-count math from the error matches the
+        // inner identity close). Using customerId since that's the only UUID
+        // we have handy.
+        const kycData = (await efetch('POST', `/ramp/customer/${customerId}/kyc`, {
+          pubkey: publicKey,
+          identity: { id: customerId, ...SANDBOX_KYC_IDENTITY },
+        })) as { status?: string };
+        kycStatus = kycData.status ?? null;
+      } catch (err) {
+        console.log('[ef-sandbox-approve] /kyc failed (likely already approved):', (err as Error).message);
+        try {
+          const statusData = (await efetch('GET', `/ramp/customer/${customerId}/kyc/${publicKey}`)) as { status?: string };
+          kycStatus = statusData.status ?? null;
+        } catch { /* keep null */ }
+      }
+
+      // 2. Get a presigned URL — required to auth the agreements endpoints.
+      let presignedUrl: string | null = null;
+      try {
+        const onboardData = (await efetch('POST', '/ramp/onboarding-url', {
+          customerId, bankAccountId, publicKey, blockchain: 'stellar',
+        })) as { presigned_url?: string };
+        presignedUrl = onboardData.presigned_url ?? null;
+      } catch (err) {
+        console.log('[ef-sandbox-approve] onboarding-url failed:', (err as Error).message);
+      }
+
+      // 3. Accept all THREE required agreements. See vite.config.ts comment.
+      if (presignedUrl) {
+        const calls: Array<[string, Record<string, unknown>]> = [
+          ['/ramp/agreements/electronic-signature', { presignedUrl }],
+          ['/ramp/agreements/terms-and-conditions', { presignedUrl }],
+          // customerInfo omitted — programmatic KYC already submitted identity data
+          ['/ramp/agreements/customer-agreement', { presignedUrl }],
+        ];
+        for (const [path, body] of calls) {
+          try {
+            await efetch('POST', path, body);
+          } catch (err) {
+            console.log(`[ef-sandbox-approve] ${path} failed (likely already accepted):`, (err as Error).message);
+          }
+        }
+      }
+
+      return json({ ok: true, data: { status: kycStatus } });
+    }
+
+    // POST /api/ef-onramp-simulate-payment — sandbox-only shortcut that flips
+    // an on-ramp order to "paid" via /ramp/order/fiat_received without an
+    // actual PIX. Gated server-side on the base URL containing "sand" so it
+    // returns 403 in production regardless of any client-side flag.
+    if (url.pathname === '/api/ef-onramp-simulate-payment' && method === 'POST') {
+      if (!BASE_URL.includes('sand')) {
+        return json({ error: 'Simulação de PIX indisponível fora do sandbox' }, 403);
+      }
+      const { orderId } = (await req.json()) as { orderId: string };
+      await efetch('POST', '/ramp/order/fiat_received', { orderId });
+      return json({ ok: true });
+    }
+
+    // POST /api/ef-onramp-claim-tx — fresh claim XDR via regenerate_tx.
+    if (url.pathname === '/api/ef-onramp-claim-tx' && method === 'POST') {
+      const { orderId } = (await req.json()) as { orderId: string };
+      const data = (await efetch('POST', `/ramp/order/${orderId}/regenerate_tx`)) as {
+        stellarClaimTransaction?: string;
+      };
+      return json({ stellarClaimTransaction: data.stellarClaimTransaction ?? null });
+    }
+
     // GET /api/ef-onramp-order — poll for on-ramp completion
     if (url.pathname === '/api/ef-onramp-order' && method === 'GET') {
       const orderId = url.searchParams.get('orderId');
@@ -213,6 +361,8 @@ export default async (req: Request): Promise<Response> => {
         confirmedTxSignature: data.confirmedTxSignature ?? null,
         amountInTokens: data.amountInTokens ?? null,
         amountInFiat: data.amountInFiat ?? null,
+        stellarClaimTransaction: data.stellarClaimTransaction ?? null,
+        stellarClaimableBalanceId: data.stellarClaimableBalanceId ?? null,
       });
     }
 
@@ -236,5 +386,8 @@ export const config = {
     '/api/ef-order',
     '/api/ef-onramp-quote',
     '/api/ef-onramp-order',
+    '/api/ef-onramp-claim-tx',
+    '/api/ef-onramp-simulate-payment',
+    '/api/ef-sandbox-approve',
   ],
 };

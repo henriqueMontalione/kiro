@@ -1,0 +1,6 @@
+.env
+.env.local
+*.md
+bin/
+tmp/
+README.md

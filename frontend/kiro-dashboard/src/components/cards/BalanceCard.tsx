@@ -1,20 +1,30 @@
-import { Diamond, ChevronRight, Eye, EyeOff, RefreshCw } from 'lucide-react';
+import { useState } from 'react';
+import { Diamond, ChevronRight, Eye, EyeOff, RefreshCw, Loader2, Sparkles } from 'lucide-react';
 import { Card, CardEyebrow } from '../Card';
 import { Button } from '../Button';
-import { BALANCE } from '@/lib/mocks';
+import { YieldInfoModal } from '../YieldInfoModal';
+import { BALANCE, YIELD_APY_LABEL } from '@/lib/mocks';
 import { useWallet } from '@/context/WalletContext';
 import { useDashboard } from '@/context/DashboardContext';
-import { formatBRL } from '@/lib/stellar';
+import { useQuote } from '@/context/QuoteContext';
 
 interface BalanceCardProps {
   onReceive: () => void;
 }
 
 export function BalanceCard({ onReceive }: BalanceCardProps) {
+  const [yieldOpen, setYieldOpen] = useState(false);
   const { isConnected, balance } = useWallet();
   const { valuesHidden, toggleValuesHidden, refresh, isRefreshing } = useDashboard();
+  const { formatTesouroAsBRL, brlPerTesouro } = useQuote();
 
-  const displayBalance = isConnected && balance !== null ? formatBRL(balance) : 'R$ 0,00';
+  const tesouroAmount = isConnected && balance !== null ? parseFloat(balance) : null;
+  const rateReady = brlPerTesouro !== null;
+  const displayBRL =
+    tesouroAmount !== null && rateReady
+      ? formatTesouroAsBRL(tesouroAmount)
+      : null;
+
   const isBlurred = !isConnected || valuesHidden;
 
   return (
@@ -63,29 +73,55 @@ export function BalanceCard({ onReceive }: BalanceCardProps) {
         )}
       </CardEyebrow>
 
-      <div
-        className="k-money font-medium"
-        style={{
-          fontSize: 64,
-          lineHeight: 1.05,
-          color: 'var(--kiro-green)',
-          textShadow: '0 0 30px rgba(0,255,135,0.30)',
-          letterSpacing: '-0.01em',
-          filter: isBlurred ? 'blur(14px)' : 'none',
-          transition: 'filter 200ms ease-out',
-          userSelect: isBlurred ? 'none' : 'auto',
-        }}
-      >
-        {displayBalance}
-      </div>
+      {/* Primary: BRL equivalent — spinner while rate is loading */}
+      {displayBRL !== null ? (
+        <div
+          className="k-money font-medium"
+          style={{
+            fontSize: 64,
+            lineHeight: 1.05,
+            color: 'var(--kiro-green)',
+            textShadow: '0 0 30px rgba(0,255,135,0.30)',
+            letterSpacing: '-0.01em',
+            filter: isBlurred ? 'blur(14px)' : 'none',
+            transition: 'filter 200ms ease-out',
+            userSelect: isBlurred ? 'none' : 'auto',
+          }}
+        >
+          {displayBRL}
+        </div>
+      ) : (
+        <div className="flex items-center gap-2 mt-3" style={{ height: 67 }}>
+          {isConnected
+            ? <Loader2 size={22} strokeWidth={1.5} className="animate-spin" style={{ color: 'var(--fg-3)' }} />
+            : <span className="k-money font-medium" style={{ fontSize: 64, lineHeight: 1.05, color: 'var(--fg-3)' }}>—</span>
+          }
+        </div>
+      )}
 
-      <div className="mt-[14px] flex items-center gap-2 font-sans text-[12px] text-[var(--fg-3)]">
-        <span
-          className="rounded-full bg-[var(--kiro-green)]"
-          style={{ width: 8, height: 8, boxShadow: '0 0 8px rgba(0,255,135,0.7)' }}
-        />
-        {BALANCE.updatedLabel}
+      <div className="mt-[14px] flex items-center gap-3 flex-wrap">
+        <div className="flex items-center gap-2 font-sans text-[12px] text-[var(--fg-3)]">
+          <span
+            className="rounded-full bg-[var(--kiro-green)]"
+            style={{ width: 8, height: 8, boxShadow: '0 0 8px rgba(0,255,135,0.7)' }}
+          />
+          {BALANCE.updatedLabel}
+        </div>
+        <button
+          type="button"
+          onClick={() => setYieldOpen(true)}
+          className="inline-flex items-center gap-[5px] rounded-full font-sans text-[11px] text-[var(--kiro-green)] bg-transparent border-none cursor-pointer transition-opacity hover:opacity-80"
+          style={{
+            padding: '4px 9px',
+            background: 'rgba(0,255,135,0.10)',
+            border: '1px solid rgba(0,255,135,0.22)',
+          }}
+        >
+          <Sparkles size={11} strokeWidth={1.8} />
+          Rendendo {YIELD_APY_LABEL}
+        </button>
       </div>
+      <YieldInfoModal open={yieldOpen} onClose={() => setYieldOpen(false)} />
 
       <div className="mt-7">
         <Button

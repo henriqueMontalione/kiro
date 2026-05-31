@@ -2,6 +2,14 @@ import type { KycStatus, SavedFiatAccount } from '../types';
 
 const BASE = '/api';
 
+type TokenProvider = () => Promise<string | null>;
+
+let tokenProvider: TokenProvider | null = null;
+
+export function setAuthTokenProvider(fn: TokenProvider | null): void {
+  tokenProvider = fn;
+}
+
 async function apiFetch<T>(
   method: 'GET' | 'POST',
   path: string,
@@ -13,9 +21,15 @@ async function apiFetch<T>(
     Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
   }
 
+  const token = tokenProvider ? await tokenProvider() : null;
+  if (!token) throw new Error('Sessão expirada. Faça login novamente.');
+
   const res = await fetch(url.toString(), {
     method,
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`,
+    },
     ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
   });
 
@@ -59,6 +73,37 @@ export async function startOnboarding(
     bankAccountId,
     publicKey,
   });
+}
+
+/**
+ * Sandbox-only escape hatch: in one round trip, this auto-approves KYC
+ * (placeholder document upload) AND accepts both required agreements
+ * (terms-and-conditions + customer-agreement). The hosted UI normally
+ * walks the user through both, so the programmatic bypass must replay
+ * the agreements step too or quotes fail with "Terms and conditions
+ * have not been completed". Server-side is gated on `ETHERFUSE_BASE_URL`
+ * containing "sand", so this no-ops in prod.
+ *
+ * Returns the canonical KYC status from the upload response — important
+ * because the regular `GET /kyc/{publicKey}` endpoint has a propagation
+ * delay and may still report "proposed" right after the upload succeeds.
+ * Trust this return value, not a follow-up `getKycStatus` call.
+ */
+export async function sandboxApprove(
+  customerId: string,
+  publicKey: string,
+  bankAccountId: string,
+): Promise<KycStatus> {
+  const res = await apiFetch<{ ok: boolean; data: { status?: string } }>(
+    'POST',
+    '/ef-sandbox-approve',
+    { customerId, publicKey, bankAccountId },
+  );
+  const raw = res.data?.status;
+  if (raw === 'approved' || raw === 'approved_chain_deploying') return 'approved';
+  if (raw === 'rejected') return 'rejected';
+  if (raw === 'proposed') return 'pending';
+  return 'not_started';
 }
 
 /** Returns the canonical KYC status for a customer+wallet pair. */
@@ -170,15 +215,35 @@ export interface OnRampPollResult {
   /** Stellar tx hash once TESOURO has been delivered. */
   confirmedTxSignature: string | null;
   amountInTokens: string | null;
+  /** Gross BRL amount the user deposited. */
   amountInFiat: string | null;
+  /** Fee charged by the exchange in BRL. Net received = amountInFiat − feeAmountInFiat. */
+  feeAmountInFiat: string | null;
+  /**
+   * Stellar-only. Present when the destination wallet lacked a TESOURO
+   * trustline at order time: Etherfuse delivers via a claimable balance and
+   * gives us back an unsigned XDR that does ChangeTrust + ClaimClaimableBalance
+   * in one transaction. The user must sign this with their wallet and submit
+   * to Horizon to actually receive the tokens.
+   */
+  stellarClaimTransaction: string | null;
+  stellarClaimableBalanceId: string | null;
 }
 
-/** Gets a BRL→TESOURO on-ramp quote for the given BRL amount. */
+/**
+ * Gets a BRL→TESOURO on-ramp quote. `walletAddress` is optional but strongly
+ * recommended — when provided, Etherfuse detects missing trustlines/accounts
+ * and folds the one-time setup cost into the fee, returning a claim XDR on
+ * the resulting order rather than rejecting it.
+ */
 export async function getOnRampQuote(
   customerId: string,
   sourceAmount: string,
+  walletAddress?: string,
 ): Promise<OnRampQuoteResult> {
-  return apiFetch<OnRampQuoteResult>('POST', '/ef-onramp-quote', { customerId, sourceAmount });
+  return apiFetch<OnRampQuoteResult>('POST', '/ef-onramp-quote', {
+    customerId, sourceAmount, walletAddress,
+  });
 }
 
 /** Creates an on-ramp order. Returns the PIX deposit details. */
@@ -197,4 +262,65 @@ export async function createOnRampOrder(
 /** Polls an on-ramp order. `status === 'completed'` means TESOURO has been delivered. */
 export async function getOnRampOrder(orderId: string): Promise<OnRampPollResult> {
   return apiFetch<OnRampPollResult>('GET', '/ef-onramp-order', undefined, { orderId });
+}
+
+/**
+ * Sandbox-only: tells Etherfuse to flip an on-ramp order to "paid" without
+ * an actual PIX. Server returns 403 in production (gate is on the base URL).
+ * UI should only surface the trigger when `VITE_ETHERFUSE_SANDBOX === 'true'`.
+ */
+export async function simulateOnRampPayment(orderId: string): Promise<void> {
+  await apiFetch<{ ok: boolean }>('POST', '/ef-onramp-simulate-payment', { orderId });
+}
+
+export interface SubmitKycBody {
+  customerId: string;
+  bankAccountId: string;
+  publicKey: string;
+  givenName: string;
+  familyName: string;
+  cpf: string;
+  birthDate: string;
+  addressStreet: string;
+  addressCity: string;
+  addressState: string;
+  addressPostalCode: string;
+}
+
+/** Submits KYC identity data to Etherfuse and accepts all required agreements. */
+export async function submitKyc(body: SubmitKycBody): Promise<{ kycStatus: string | null }> {
+  return apiFetch<{ kycStatus: string | null }>('POST', '/ef-kyc-submit', body);
+}
+
+export interface KycDocImage {
+  label: string;
+  image: string;
+}
+
+/** Uploads KYC document images (id_front/id_back or selfie) to Etherfuse. */
+export async function uploadKycDocuments(
+  customerId: string,
+  publicKey: string,
+  documentType: 'document' | 'selfie',
+  images: KycDocImage[],
+): Promise<void> {
+  await apiFetch<{ ok: boolean }>('POST', '/ef-kyc-documents', {
+    customerId,
+    publicKey,
+    documentType,
+    images,
+  });
+}
+
+/**
+ * Asks Etherfuse to rebuild and return a fresh Stellar claim XDR for a
+ * completed on-ramp order. Use as a fallback when the order GET response
+ * comes back with `stellarClaimTransaction: null` even though the order
+ * is completed (observed with sandbox simulate-deposit).
+ */
+export async function regenerateClaimXdr(orderId: string): Promise<string | null> {
+  const res = await apiFetch<{ stellarClaimTransaction: string | null }>(
+    'POST', '/ef-onramp-claim-tx', { orderId },
+  );
+  return res.stellarClaimTransaction;
 }
