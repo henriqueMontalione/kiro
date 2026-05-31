@@ -30,17 +30,17 @@ export function RecebimentosCard() {
     const incomingToday = (payments ?? []).filter(
       (p) => p.direction === 'in' && isSameDay(p.createdAt, today),
     );
-    const total = incomingToday.reduce((acc, p) => acc + parseFloat(p.amount), 0);
+    const totalCentavos = incomingToday.reduce((acc, p) => acc + p.brlCentavos, 0);
     const buckets = Array<number>(24).fill(0);
     for (const p of incomingToday) {
       const hour = new Date(p.createdAt).getHours();
-      buckets[hour] += parseFloat(p.amount);
+      buckets[hour] += p.brlCentavos;
     }
 
     const showLoading = isConnected && payments === null;
     const count = incomingToday.length;
     return {
-      totalLabel: showLoading ? '—' : formatBRL(total.toFixed(7)),
+      totalLabel: showLoading ? '—' : formatBRL((totalCentavos / 100).toString()),
       countLabel: showLoading
         ? ' '
         : count === 1
